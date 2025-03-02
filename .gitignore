@@ -1,5 +1,10 @@
 build/
 dist/
 logs/
+.idea/
 
 *.spec
+*.iml
+
+misc.xml
+error_log.txt

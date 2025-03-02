@@ -8,10 +8,10 @@ def build_executable():
 
     subprocess.run([
         "pyinstaller",
-        "--name=CSV2XL",
+        "--name=TaskAnalyzer",
         "--windowed",
-        "--icon=assets/CSV2XL.ico",
-        "--add-data", "config.ini;.",
+        "--icon=assets/TaskAnalyzer.ico",
+        "--add-data", "config.ini:.",
         "main.py"
     ])
 

@@ -1,11 +1,12 @@
-import sys
+import tkinter as tk
+from app_window import TaskAnalyzerGUI
+from version import VERSION
 
-from app_main_window import MainWindow, QApplication
-from version import VERSION, LAST_UPDATED
 
+def main():
+    root = tk.Tk()
+    TaskAnalyzerGUI(root)
+    root.mainloop()
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+    main()
