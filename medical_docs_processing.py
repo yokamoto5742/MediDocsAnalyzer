@@ -1,8 +1,78 @@
 import polars as pl
 import openpyxl
+from openpyxl.styles import Alignment
 from pathlib import Path
 import os
 import datetime
+
+
+def get_last_row(worksheet):
+    """
+    ワークシートの最終行を取得する
+
+    Args:
+        worksheet: openpyxlのワークシートオブジェクト
+
+    Returns:
+        int: 最終行の行番号
+    """
+    last_row = 0
+    for row in worksheet.iter_rows():
+        if all(cell.value is None for cell in row):
+            break
+        last_row += 1
+    return last_row
+
+
+def apply_cell_formats(worksheet, start_row):
+    """
+    セルの書式を適用する
+
+    Args:
+        worksheet: openpyxlのワークシートオブジェクト
+        start_row: 書式適用を開始する行番号
+    """
+    last_row = get_last_row(worksheet)
+
+    # A列からI列までの範囲を設定
+    for row in range(start_row, last_row + 1):
+        for col in range(1, 10):  # A-I列（1-9）
+            cell = worksheet.cell(row=row, column=col)
+
+            cell.alignment = Alignment(vertical='center')
+
+            if col in [1, 2, 5, 6, 8]:  # A, B, E, F, H列
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+
+            elif col in [3, 4, 7, 9]:  # C, D, G, I列
+                cell.alignment = Alignment(horizontal='left', vertical='center', shrink_to_fit=True)
+
+
+def sort_worksheet_data(worksheet):
+    """
+    ワークシートのデータを並べ替える（openpyxlで実装）
+
+    Args:
+        worksheet: openpyxlのワークシートオブジェクト
+    """
+    # データ部分（ヘッダー以外）を取得
+    data_rows = list(worksheet.iter_rows(min_row=2, values_only=True))
+
+    # データがない場合は何もしない
+    if not data_rows:
+        return
+
+    # 並べ替え：預り日(0列目)昇順 → 診療科(4列目)昇順 → 患者ID(1列目)昇順
+    sorted_rows = sorted(data_rows, key=lambda x: (
+        x[0] or datetime.datetime.min,  # 預り日
+        x[4] or "",  # 診療科
+        x[1] or 0  # 患者ID
+    ))
+
+    # 並べ替え後のデータを書き込み
+    for i, row_data in enumerate(sorted_rows, start=2):
+        for j, value in enumerate(row_data, start=1):
+            worksheet.cell(row=i, column=j).value = value
 
 
 def process_medical_documents(source_file, target_file):
@@ -159,9 +229,26 @@ def process_medical_documents(source_file, target_file):
 
             print(f"重複削除後: {len(df)} 行")
 
-            # 結果をターゲットファイルに書き込み
-            result_wb = openpyxl.Workbook()
-            result_sheet = result_wb.active
+            # 既存のターゲットファイルを開くか、存在しない場合は新規作成
+            if os.path.exists(target_file):
+                try:
+                    result_wb = openpyxl.load_workbook(target_file)
+                    # シート名を保持
+                    sheet_names = result_wb.sheetnames
+                    active_sheet_name = result_wb.active.title
+                    # 既存のデータをクリアするため最初のシートを削除して再作成
+                    if sheet_names:
+                        for sheet_name in sheet_names:
+                            del result_wb[sheet_name]
+                    result_sheet = result_wb.create_sheet(title=active_sheet_name)
+                except Exception as e:
+                    print(f"既存ファイルを開く際にエラーが発生しました: {e}")
+                    # エラーの場合は新規作成
+                    result_wb = openpyxl.Workbook()
+                    result_sheet = result_wb.active
+            else:
+                result_wb = openpyxl.Workbook()
+                result_sheet = result_wb.active
 
             # ヘッダーを書き込み（A-I列）
             for col_idx, header in enumerate(headers, 1):
@@ -210,6 +297,18 @@ def process_medical_documents(source_file, target_file):
                                 cell.value = value
                         else:
                             cell.value = value
+
+            # データを並べ替え
+            print("データを並べ替えます...")
+            sort_worksheet_data(result_sheet)
+
+            # セルの書式を適用
+            print("セルの書式を適用します...")
+            apply_cell_formats(result_sheet, 2)  # 2行目（データ行の開始）から適用
+
+            # 不要なデフォルトシートを削除（新規作成時のみ）
+            if 'Sheet' in result_wb.sheetnames and len(result_wb.sheetnames) > 1:
+                del result_wb['Sheet']
 
             # ファイルを保存
             result_wb.save(target_file)
