@@ -5,6 +5,8 @@ from pathlib import Path
 import os
 import datetime
 
+from config_manager import load_config
+
 
 def get_last_row(worksheet):
     """
@@ -341,14 +343,8 @@ def process_medical_documents(source_file, target_file):
         return False
 
 
-# メイン実行
 if __name__ == "__main__":
-    source_file = "backup_医療文書担当一覧.xlsm"
-    target_file = "医療文書担当一覧データベース.xlsx"
-
-    success = process_medical_documents(source_file, target_file)
-
-    if success:
-        print("データ処理が正常に完了しました")
-    else:
-        print("データ処理中にエラーが発生しました")
+    config = load_config()
+    source_file_path = config['PATHS']['source_file_path']
+    database_path = config['PATHS']['database_path']
+    success = process_medical_documents(source_file_path, database_path)
