@@ -41,10 +41,10 @@ def apply_cell_formats(worksheet, start_row):
 
             cell.alignment = Alignment(vertical='center')
 
-            if col in [1, 2, 5, 6, 8]:  # A, B, E, F, H列
+            if col in [1, 2, 5, 6, 7, 8]:  # A, B, E, F, H列
                 cell.alignment = Alignment(horizontal='center', vertical='center')
 
-            elif col in [3, 4, 7, 9]:  # C, D, G, I列
+            elif col in [3, 4, 9]:  # C, D, I列
                 cell.alignment = Alignment(horizontal='left', vertical='center', shrink_to_fit=True)
 
 
@@ -229,18 +229,18 @@ def process_medical_documents(source_file, target_file):
 
             print(f"重複削除後: {len(df)} 行")
 
-            # 既存のターゲットファイルを開くか、存在しない場合は新規作成
             if os.path.exists(target_file):
                 try:
                     result_wb = openpyxl.load_workbook(target_file)
-                    # シート名を保持
-                    sheet_names = result_wb.sheetnames
-                    active_sheet_name = result_wb.active.title
-                    # 既存のデータをクリアするため最初のシートを削除して再作成
-                    if sheet_names:
-                        for sheet_name in sheet_names:
-                            del result_wb[sheet_name]
-                    result_sheet = result_wb.create_sheet(title=active_sheet_name)
+                    result_sheet = result_wb.active
+
+                    # 既存のデータをクリア (セルの値のみを消去し、書式は保持)
+                    data_rows = result_sheet.max_row
+                    data_cols = 9  # A-I列まで
+                    for row in range(2, data_rows + 1):  # ヘッダー以外をクリア
+                        for col in range(1, data_cols + 1):
+                            cell = result_sheet.cell(row=row, column=col)
+                            cell.value = None  # 値のみクリア
                 except Exception as e:
                     print(f"既存ファイルを開く際にエラーが発生しました: {e}")
                     # エラーの場合は新規作成
