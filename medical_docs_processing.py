@@ -48,6 +48,8 @@ def apply_cell_formats(worksheet, start_row):
                 cell.alignment = Alignment(horizontal='left', vertical='center', shrink_to_fit=True)
 
 
+# sort_worksheet_data関数の修正
+
 def sort_worksheet_data(worksheet):
     """
     ワークシートのデータを並べ替える（openpyxlで実装）
@@ -64,7 +66,7 @@ def sort_worksheet_data(worksheet):
 
     # 並べ替え：預り日(0列目)昇順 → 診療科(4列目)昇順 → 患者ID(1列目)昇順
     sorted_rows = sorted(data_rows, key=lambda x: (
-        x[0] or datetime.datetime.min,  # 預り日
+        x[0] or datetime.datetime.min if isinstance(x[0], datetime.datetime) else str(x[0] or ""),  # 預り日
         x[4] or "",  # 診療科
         x[1] or 0  # 患者ID
     ))
@@ -206,11 +208,26 @@ def process_medical_documents(source_file, target_file):
 
             # 医師依頼日が空欄の行を削除
             if "医師依頼日" in df.columns:
+                # 文字列型に変換してから比較
+                df = df.with_columns([
+                    pl.col("医師依頼日").cast(pl.Utf8).fill_null("").alias("医師依頼日")
+                ])
                 df = df.filter(pl.col("医師依頼日") != "")
             else:
                 print("警告: '医師依頼日'の列が見つかりません。この条件でのフィルタリングをスキップします。")
 
             print(f"空の医師依頼日を持つ行を削除した後: {len(df)} 行")
+
+            # 担当者名が空欄の行を削除
+            if "担当者名" in df.columns:
+                # 文字列型に変換してから比較
+                df = df.with_columns([
+                    pl.col("担当者名").cast(pl.Utf8).fill_null("").alias("担当者名")
+                ])
+                df = df.filter(pl.col("担当者名") != "")
+                print(f"空の担当者名を持つ行を削除した後: {len(df)} 行")
+            else:
+                print("警告: '担当者名'の列が見つかりません。この条件でのフィルタリングをスキップします。")
 
             # 重複行を削除（預り日、患者ID、文書名、診療科、医師名の組み合わせが同じ行）
             # まず必要な列が存在するか確認
