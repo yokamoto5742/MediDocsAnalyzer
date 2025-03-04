@@ -112,6 +112,12 @@ def analyze_medical_documents(file_path, template_path="医療文書作成件数
             pl.col('担当者名').is_not_null()
         ).unique().sort('担当者名').to_series().to_list()
 
+        # 指定された順序
+        ordered_names = ["植田", "沖野", "鴨林", "小牧", "渋井", "白岡", "大代", "高林", "高宮", "中野", "花﨑", "松島","山本"]
+
+        # リストを指定された順序に並べ替え（データにない名前は無視）
+        staff_members = [name for name in ordered_names if name in staff_members]
+
         # 診療科のリストを取得（None値を除外）
         departments = df.select('診療科').filter(
             pl.col('診療科').is_not_null()
@@ -156,20 +162,6 @@ def analyze_medical_documents(file_path, template_path="医療文書作成件数
 
 def output_excel(template_path, staff_members, departments, grouped_data, staff_totals,
                  dept_totals, start_date, end_date, file_date_range):
-    """
-    集計結果をExcelファイルに出力する関数
-
-    Parameters:
-        template_path (str): テンプレートExcelファイルのパス
-        staff_members (list): 担当者リスト
-        departments (list): 診療科リスト
-        grouped_data (pl.DataFrame): 担当者×診療科の集計データ
-        staff_totals (pl.DataFrame): 担当者ごとの合計件数
-        dept_totals (pl.DataFrame): 診療科ごとの合計件数
-        start_date (str): 期間の開始日
-        end_date (str): 期間の終了日
-        file_date_range (str): ファイル名用の日付範囲
-    """
     try:
         # 出力ファイル名の設定
         output_file = f"医療文書作成件数{file_date_range}.xlsx"
