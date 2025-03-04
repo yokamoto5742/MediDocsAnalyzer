@@ -1,13 +1,13 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime
-from service_task_analyzer import TaskAnalyzer
+from service_medical_docs_analyzer import MedicalDocsAnalyzer
 
 
 class TestTaskAnalyzer:
     @patch('service_task_analyzer.load_config')
     @patch('service_task_analyzer.ExcelTaskReader')
-    @patch('service_task_analyzer.TaskDataAnalyzer')
+    @patch('service_task_analyzer.DataAnalyzer')
     @patch('service_task_analyzer.ExcelResultWriter')
     def test_initialization(self, mock_writer, mock_analyzer, mock_reader, mock_load_config):
         # モックの設定
@@ -21,7 +21,7 @@ class TestTaskAnalyzer:
         mock_load_config.return_value = mock_config
         
         # テスト実行
-        analyzer = TaskAnalyzer()
+        analyzer = MedicalDocsAnalyzer()
         
         # 検証
         assert analyzer.config == mock_config
@@ -32,7 +32,7 @@ class TestTaskAnalyzer:
 
     @patch('service_task_analyzer.load_config')
     @patch('service_task_analyzer.ExcelTaskReader')
-    @patch('service_task_analyzer.TaskDataAnalyzer')
+    @patch('service_task_analyzer.DataAnalyzer')
     @patch('service_task_analyzer.ExcelResultWriter')
     def test_run_analysis_success(self, mock_writer_class, mock_analyzer_class, mock_reader_class, mock_load_config):
         # モックの設定
@@ -75,7 +75,7 @@ class TestTaskAnalyzer:
         mock_writer.save_results.return_value = 'output_file_path.xlsx'
         
         # テスト実行
-        analyzer = TaskAnalyzer()
+        analyzer = MedicalDocsAnalyzer()
         success, message = analyzer.run_analysis('2024-01-01', '2024-01-05')
         
         # 検証
@@ -119,7 +119,7 @@ class TestTaskAnalyzer:
         mock_load_config.return_value = mock_config
         
         # テスト実行 - 不正な日付形式
-        analyzer = TaskAnalyzer()
+        analyzer = MedicalDocsAnalyzer()
         success, message = analyzer.run_analysis('2024/01/01', '2024-01-05')
         
         # 検証
@@ -145,7 +145,7 @@ class TestTaskAnalyzer:
         mock_reader.read_workbook.side_effect = Exception('テストエラー')
         
         # テスト実行
-        analyzer = TaskAnalyzer()
+        analyzer = MedicalDocsAnalyzer()
         success, message = analyzer.run_analysis('2024-01-01', '2024-01-05')
         
         # 検証

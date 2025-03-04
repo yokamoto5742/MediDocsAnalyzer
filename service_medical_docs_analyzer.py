@@ -1,16 +1,14 @@
 from datetime import datetime
 from config_manager import load_config
-from service_excel_reader import ExcelTaskReader
-from service_data_analyzer import TaskDataAnalyzer
 from service_excel_writer import ExcelResultWriter
 
 
-class TaskAnalyzer:
+class MedicalDocsAnalyzer:
     def __init__(self):
         self.config = load_config()
         self.paths_config = self.config['PATHS']
         self.reader = ExcelTaskReader(self.config)
-        self.analyzer = TaskDataAnalyzer()
+        self.analyzer = DataAnalyzer()
         self.writer = ExcelResultWriter()
 
     def run_analysis(self, start_date_str, end_date_str):

@@ -67,7 +67,7 @@ def restore_config(config, original_config):
 
 @pytest.fixture
 def mock_analyzer():
-    with patch('app_window.TaskAnalyzer') as mock_task_analyzer:
+    with patch('app_window.MedicalDocsAnalyzer') as mock_task_analyzer:
         analyzer = Mock()
         mock_task_analyzer.return_value = analyzer
         yield analyzer

@@ -1,7 +1,7 @@
 import polars as pl
 
 
-class TaskDataAnalyzer:
+class DataAnalyzer:
     @staticmethod
     def create_dataframes(tasks, daily_tasks, communication_tasks, all_items):
         df = pl.DataFrame(tasks)

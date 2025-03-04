@@ -8,9 +8,9 @@ def build_executable():
 
     subprocess.run([
         "pyinstaller",
-        "--name=TaskAnalyzer",
+        "--name=MedicalDocsAnalyzer",
         "--windowed",
-        "--icon=assets/TaskAnalyzer.ico",
+        "--icon=assets/MedicalDocsAnalyzer.ico",
         "--add-data", "config.ini:.",
         "main.py"
     ])

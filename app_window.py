@@ -7,7 +7,7 @@ import subprocess
 
 from config_manager import load_config, save_config
 from version import VERSION
-from service_task_analyzer import TaskAnalyzer
+from service_medical_docs_analyzer import MedicalDocsAnalyzer
 
 
 class TaskAnalyzerGUI:
@@ -15,7 +15,7 @@ class TaskAnalyzerGUI:
         self.root = root
         self.root.title(f'業務分析 v{VERSION}')
         self.config = load_config()
-        self.analyzer = TaskAnalyzer()
+        self.analyzer = MedicalDocsAnalyzer()
 
         window_width = self.config.getint('Appearance', 'window_width')
         window_height = self.config.getint('Appearance', 'window_height')

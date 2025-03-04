@@ -1,6 +1,6 @@
 import pytest
 import polars as pl
-from service_data_analyzer import TaskDataAnalyzer
+from service_data_analyzer import DataAnalyzer
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def sample_all_items():
 class TestTaskDataAnalyzer:
     def test_create_dataframes(self, sample_tasks, sample_daily_tasks, sample_communication_tasks, sample_all_items):
         # テスト実行
-        df, daily_df, comm_df, all_items_df = TaskDataAnalyzer.create_dataframes(
+        df, daily_df, comm_df, all_items_df = DataAnalyzer.create_dataframes(
             sample_tasks, sample_daily_tasks, sample_communication_tasks, sample_all_items
         )
         
@@ -68,7 +68,7 @@ class TestTaskDataAnalyzer:
         df = pl.DataFrame(sample_tasks)
         
         # テスト実行
-        result = TaskDataAnalyzer.aggregate_dataframe(df)
+        result = DataAnalyzer.aggregate_dataframe(df)
         
         # 検証
         assert isinstance(result, pl.DataFrame)
@@ -88,7 +88,7 @@ class TestTaskDataAnalyzer:
         df = pl.DataFrame(sample_tasks)
         
         # テスト実行：クラーク業務のみフィルタリング
-        result = TaskDataAnalyzer.aggregate_dataframe(
+        result = DataAnalyzer.aggregate_dataframe(
             df, filter_condition=pl.col('content').str.contains('クラーク業務')
         )
         
@@ -101,7 +101,7 @@ class TestTaskDataAnalyzer:
         df = pl.DataFrame(sample_communication_tasks)
         
         # テスト実行
-        result = TaskDataAnalyzer.aggregate_dataframe(df)
+        result = DataAnalyzer.aggregate_dataframe(df)
         
         # 検証
         assert 'name' in result.columns
@@ -113,7 +113,7 @@ class TestTaskDataAnalyzer:
 
     def test_analyze_task_data(self, sample_tasks, sample_daily_tasks, sample_communication_tasks, sample_all_items):
         # テスト準備
-        analyzer = TaskDataAnalyzer()
+        analyzer = DataAnalyzer()
         
         # テスト実行
         results = analyzer.analyze_task_data(
