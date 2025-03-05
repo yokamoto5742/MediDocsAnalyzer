@@ -10,6 +10,13 @@ from config_manager import load_config
 warnings.simplefilter('ignore')
 
 
+def get_ordered_names(config):
+    ordered_names_str = config['Analysis'].get('ordered_names', "")
+    if ordered_names_str:
+        return [name.strip() for name in ordered_names_str.split(',')]
+    return []
+
+
 def analyze_medical_documents(file_path, template_path="医療文書作成件数.xlsx"):
     """
     医療文書の作成件数を担当者・診療科別に集計して表示し、Excelに出力する関数
@@ -114,8 +121,8 @@ def analyze_medical_documents(file_path, template_path="医療文書作成件数
             pl.col('担当者名').is_not_null()
         ).unique().sort('担当者名').to_series().to_list()
 
-        # 指定された順序
-        ordered_names = ["植田", "沖野", "鴨林", "小牧", "渋井", "白岡", "大代", "高林", "高宮", "中野", "花﨑", "松島","山本"]
+        ordered_names_str = config['Analysis'].get('ordered_names', "")
+        ordered_names = [name.strip() for name in ordered_names_str.split(',')] if ordered_names_str else []
 
         # リストを指定された順序に並べ替え（データにない名前は無視）
         staff_members = [name for name in ordered_names if name in staff_members]
@@ -238,6 +245,7 @@ def output_excel(template_path, staff_members, departments, grouped_data, staff_
 # 使用例
 if __name__ == "__main__":
     config = load_config()
+    ordered_names = get_ordered_names(config)
     database_path = config['PATHS']['database_path']
     template_path = config['PATHS']['template_path']
     analyze_medical_documents(database_path, template_path)

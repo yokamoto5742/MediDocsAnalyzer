@@ -17,12 +17,18 @@ def get_config_path():
 CONFIG_PATH = get_config_path()
 
 
-
 def load_config() -> configparser.ConfigParser:
     config = configparser.ConfigParser()
     try:
         with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
             config.read_file(f)
+
+        if 'Analysis' not in config:
+            config['Analysis'] = {}
+
+        if 'ordered_names' not in config['Analysis']:
+            config['Analysis']['ordered_names'] = "植田,沖野,鴨林,小牧,渋井,白岡,大代,高林,高宮,中野,花﨑,松島,山本"
+            save_config(config)
     except FileNotFoundError:
         print(f"設定ファイルが見つかりません: {CONFIG_PATH}")
         raise
