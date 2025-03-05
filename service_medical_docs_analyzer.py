@@ -31,7 +31,7 @@ class MedicalDocsAnalyzer:
 
             output_file = self.writer.save_results(
                 analysis_results,
-                self.paths_config['template_path'],
+                self.paths_config['excel_template_path'],
                 self.paths_config['output_dir'],
                 actual_start_date,
                 actual_end_date

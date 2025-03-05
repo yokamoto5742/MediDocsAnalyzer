@@ -8,7 +8,7 @@ from shutil import copyfile
 from config_manager import load_config, get_ordered_names
 
 
-def analyze_medical_documents(file_path, template_path):
+def analyze_medical_documents(file_path, excel_template_path):
 
     try:
         workbook = openpyxl.load_workbook(file_path, read_only=True)
@@ -97,18 +97,18 @@ def analyze_medical_documents(file_path, template_path):
             pl.col('担当者名').is_not_null()
         ).unique().sort('担当者名').to_series().to_list()
 
-        ordered_names_str = config['Analysis'].get('ordered_names', "")
-        ordered_names = [name.strip() for name in ordered_names_str.split(',')] if ordered_names_str else []
+        ordered_names_str = config['Analysis'].get('config_ordered_names', "")
+        config_ordered_names = [name.strip() for name in ordered_names_str.split(',')] if ordered_names_str else []
 
         # リストを指定された順序に並べ替え（データにない名前は無視）
-        staff_members = [name for name in ordered_names if name in staff_members]
+        staff_members = [name for name in config_ordered_names if name in staff_members]
 
         # 診療科のリストを取得（None値を除外）
         departments = df.select('診療科').filter(
             pl.col('診療科').is_not_null()
         ).unique().sort('診療科').to_series().to_list()
 
-        output_excel(template_path, staff_members, departments, grouped, staff_totals,
+        output_excel(excel_template_path, staff_members, departments, grouped, staff_totals,
                      dept_totals, start_date, end_date, file_date_range)
 
     except FileNotFoundError:
@@ -117,18 +117,18 @@ def analyze_medical_documents(file_path, template_path):
         print(f"エラー: データの読み込み中に問題が発生しました - {str(e)}")
 
 
-def output_excel(template_path, staff_members, departments, grouped_data, staff_totals,
+def output_excel(excel_template_path, staff_members, departments, grouped_data, staff_totals,
                  dept_totals, start_date, end_date, file_date_range):
     try:
         output_file = f"医療文書作成件数{file_date_range}.xlsx"
 
         # テンプレートが存在する場合はコピー、存在しない場合は新規作成
-        if os.path.exists(template_path):
-            copyfile(template_path, output_file)
+        if os.path.exists(excel_template_path):
+            copyfile(excel_template_path, output_file)
             workbook = openpyxl.load_workbook(output_file)
             sheet = workbook.active
         else:
-            print(f"警告: テンプレートファイル '{template_path}' が見つかりません。新規ファイルを作成します。")
+            print(f"警告: テンプレートファイル '{excel_template_path}' が見つかりません。新規ファイルを作成します。")
             workbook = openpyxl.Workbook()
             sheet = workbook.active
 

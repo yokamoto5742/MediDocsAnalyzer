@@ -14,7 +14,7 @@ class TestTaskAnalyzer:
         mock_config = {
             'PATHS': {
                 'input_file_path': 'test_input.xlsx',
-                'template_path': 'test_template.xlsx',
+                'excel_template_path': 'test_template.xlsx',
                 'output_dir': 'test_output'
             }
         }
@@ -39,7 +39,7 @@ class TestTaskAnalyzer:
         mock_config = {
             'PATHS': {
                 'input_file_path': 'test_input.xlsx',
-                'template_path': 'test_template.xlsx',
+                'excel_template_path': 'test_template.xlsx',
                 'output_dir': 'test_output'
             }
         }
@@ -133,7 +133,7 @@ class TestTaskAnalyzer:
         mock_config = {
             'PATHS': {
                 'input_file_path': 'test_input.xlsx',
-                'template_path': 'test_template.xlsx',
+                'excel_template_path': 'test_template.xlsx',
                 'output_dir': 'test_output'
             }
         }
