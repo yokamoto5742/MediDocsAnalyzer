@@ -51,6 +51,39 @@ def sort_worksheet_data(worksheet):
             worksheet.cell(row=i, column=j).value = value
 
 
+def process_cell_value(cell):
+    """セルの値を適切に処理する関数"""
+    if cell.column == 1 and cell.value:  # A列（預り日）
+        if isinstance(cell.value, (datetime.datetime, datetime.date)):
+            # 日付オブジェクトを文字列に変換
+            return cell.value.strftime('%Y/%m/%d')
+        return cell.value
+    elif cell.column == 2 and cell.value:  # B列（患者ID）
+        # 患者IDを数値として処理
+        try:
+            if isinstance(cell.value, str):
+                # 文字列の場合は数値に変換
+                return int(cell.value)
+            return cell.value
+        except (ValueError, TypeError):
+            # 数値変換できない場合は元の値を使用
+            return cell.value
+    elif cell.column == 8 and cell.value:  # H列（医師依頼日）
+        if isinstance(cell.value, (datetime.datetime, datetime.date)):
+            # 日付オブジェクトを文字列に変換
+            return cell.value.strftime('%Y/%m/%d')
+        return cell.value
+    else:
+        return cell.value
+
+def read_excel_data(sheet, headers):
+    """Excelシートからデータを読み込む関数"""
+    data = []
+    for row in sheet.iter_rows(min_row=2, max_col=9):
+        processed_row = [process_cell_value(cell) for cell in row]
+        data.append(processed_row)
+    return pl.DataFrame(data, schema=headers, orient="row")
+
 def process_medical_documents(source_file, target_file):
     try:
         source_wb = openpyxl.load_workbook(source_file)
@@ -59,40 +92,7 @@ def process_medical_documents(source_file, target_file):
         # ソースファイルからデータを読み込む
         if source_sheet.max_row > 0:  # シートが空でないことを確認
             headers = [cell.value for cell in source_sheet[1][0:9] if cell.value is not None]  # A-I列
-
-            data = []
-            for row in source_sheet.iter_rows(min_row=2, max_col=9):
-                processed_row = []
-                for idx, cell in enumerate(row):
-                    # 日付セルの処理
-                    if cell.column == 1 and cell.value:  # A列（預り日）
-                        if isinstance(cell.value, (datetime.datetime, datetime.date)):
-                            # 日付オブジェクトを文字列に変換
-                            processed_row.append(cell.value.strftime('%Y/%m/%d'))
-                        else:
-                            processed_row.append(cell.value)
-                    elif cell.column == 2 and cell.value:  # B列（患者ID）
-                        # 患者IDを数値として処理
-                        try:
-                            if isinstance(cell.value, str):
-                                # 文字列の場合は数値に変換
-                                processed_row.append(int(cell.value))
-                            else:
-                                processed_row.append(cell.value)
-                        except (ValueError, TypeError):
-                            # 数値変換できない場合は元の値を使用
-                            processed_row.append(cell.value)
-                    elif cell.column == 8 and cell.value:  # H列（医師依頼日）
-                        if isinstance(cell.value, (datetime.datetime, datetime.date)):
-                            # 日付オブジェクトを文字列に変換
-                            processed_row.append(cell.value.strftime('%Y/%m/%d'))
-                        else:
-                            processed_row.append(cell.value)
-                    else:
-                        processed_row.append(cell.value)
-                data.append(processed_row)
-
-            df = pl.DataFrame(data, schema=headers, orient="row")
+            df = read_excel_data(source_sheet, headers)
 
             print(f"ソースファイルから {len(df)} 行のデータを読み込みました")
 
@@ -101,41 +101,8 @@ def process_medical_documents(source_file, target_file):
                 target_sheet = target_wb.active
 
                 if target_sheet.max_row > 0:
-                    target_headers = [cell.value for cell in target_sheet[1][0:9] if
-                                      cell.value is not None]
-
-                    target_data = []
-                    for row in target_sheet.iter_rows(min_row=2, max_col=9):
-                        processed_row = []
-                        for idx, cell in enumerate(row):
-                            if cell.column == 1 and cell.value:  # A列（預り日）
-                                if isinstance(cell.value, (datetime.datetime, datetime.date)):
-                                    # 日付オブジェクトを文字列に変換
-                                    processed_row.append(cell.value.strftime('%Y/%m/%d'))
-                                else:
-                                    processed_row.append(cell.value)
-                            elif cell.column == 2 and cell.value:  # B列（患者ID）
-                                # 患者IDを数値として処理
-                                try:
-                                    if isinstance(cell.value, str):
-                                        # 文字列の場合は数値に変換
-                                        processed_row.append(int(cell.value))
-                                    else:
-                                        processed_row.append(cell.value)
-                                except (ValueError, TypeError):
-                                    # 数値変換できない場合は元の値を使用
-                                    processed_row.append(cell.value)
-                            elif cell.column == 8 and cell.value:  # H列（医師依頼日）
-                                if isinstance(cell.value, (datetime.datetime, datetime.date)):
-                                    # 日付オブジェクトを文字列に変換
-                                    processed_row.append(cell.value.strftime('%Y/%m/%d'))
-                                else:
-                                    processed_row.append(cell.value)
-                            else:
-                                processed_row.append(cell.value)
-                        target_data.append(processed_row)
-
-                    target_df = pl.DataFrame(target_data, schema=target_headers, orient="row")
+                    target_headers = [cell.value for cell in target_sheet[1][0:9] if cell.value is not None]
+                    target_df = read_excel_data(target_sheet, target_headers)
                 else:
                     # ターゲットシートが空の場合は空のデータフレームを作成
                     target_df = pl.DataFrame(schema=headers)
