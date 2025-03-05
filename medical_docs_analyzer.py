@@ -5,6 +5,8 @@ from datetime import datetime
 import os
 from shutil import copyfile
 
+from config_manager import load_config
+
 warnings.simplefilter('ignore')
 
 
@@ -235,6 +237,7 @@ def output_excel(template_path, staff_members, departments, grouped_data, staff_
 
 # 使用例
 if __name__ == "__main__":
-    file_path = "医療文書担当一覧データベース.xlsx"
-    template_path = "医療文書作成件数.xlsx"
-    analyze_medical_documents(file_path, template_path)
+    config = load_config()
+    database_path = config['PATHS']['database_path']
+    template_path = config['PATHS']['template_path']
+    analyze_medical_documents(database_path, template_path)
