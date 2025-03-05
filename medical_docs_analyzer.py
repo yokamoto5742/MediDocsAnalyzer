@@ -5,16 +5,7 @@ from datetime import datetime
 import os
 from shutil import copyfile
 
-from config_manager import load_config
-
-warnings.simplefilter('ignore')
-
-
-def get_ordered_names(config):
-    ordered_names_str = config['Analysis'].get('ordered_names', "")
-    if ordered_names_str:
-        return [name.strip() for name in ordered_names_str.split(',')]
-    return []
+from config_manager import load_config, get_ordered_names
 
 
 def analyze_medical_documents(file_path, template_path="医療文書作成件数.xlsx"):
@@ -99,21 +90,21 @@ def analyze_medical_documents(file_path, template_path="医療文書作成件数
         grouped = df.filter(
             pl.col('担当者名').is_not_null() & pl.col('診療科').is_not_null()
         ).group_by(['担当者名', '診療科']).agg(
-            pl.count().alias('作成件数')
+            pl.len().alias('作成件数')
         )
 
         # 担当者ごとの合計件数を計算
         staff_totals = df.filter(
             pl.col('担当者名').is_not_null()
         ).group_by('担当者名').agg(
-            pl.count().alias('作成件数')
+            pl.len().alias('作成件数')
         ).sort('担当者名')
 
         # 診療科ごとの合計件数を計算
         dept_totals = df.filter(
             pl.col('診療科').is_not_null()
         ).group_by('診療科').agg(
-            pl.count().alias('作成件数')
+            pl.len().alias('作成件数')
         ).sort('作成件数', descending=True)
 
         # 担当者のリストを取得（None値を除外）

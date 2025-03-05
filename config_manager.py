@@ -41,6 +41,13 @@ def load_config() -> configparser.ConfigParser:
     return config
 
 
+def get_ordered_names(config):
+    ordered_names_str = config['Analysis'].get('ordered_names', "")
+    if ordered_names_str:
+        return [name.strip() for name in ordered_names_str.split(',')]
+    return []
+
+
 def save_config(config: configparser.ConfigParser):
     try:
         with open(CONFIG_PATH, 'w', encoding='utf-8') as configfile:
