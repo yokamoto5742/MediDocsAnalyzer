@@ -9,15 +9,6 @@ from config_manager import load_config
 
 
 def get_last_row(worksheet):
-    """
-    ワークシートの最終行を取得する
-
-    Args:
-        worksheet: openpyxlのワークシートオブジェクト
-
-    Returns:
-        int: 最終行の行番号
-    """
     last_row = 0
     for row in worksheet.iter_rows():
         if all(cell.value is None for cell in row):
@@ -27,20 +18,12 @@ def get_last_row(worksheet):
 
 
 def apply_cell_formats(worksheet, start_row):
-    """
-    セルの書式を適用する
-
-    Args:
-        worksheet: openpyxlのワークシートオブジェクト
-        start_row: 書式適用を開始する行番号
-    """
     last_row = get_last_row(worksheet)
 
     # A列からI列までの範囲を設定
     for row in range(start_row, last_row + 1):
-        for col in range(1, 10):  # A-I列（1-9）
+        for col in range(1, 10):
             cell = worksheet.cell(row=row, column=col)
-
             cell.alignment = Alignment(vertical='center')
 
             if col in [1, 2, 5, 6, 7, 8]:  # A, B, E, F, H列
@@ -50,23 +33,12 @@ def apply_cell_formats(worksheet, start_row):
                 cell.alignment = Alignment(horizontal='left', vertical='center', shrink_to_fit=True)
 
 
-# sort_worksheet_data関数の修正
-
 def sort_worksheet_data(worksheet):
-    """
-    ワークシートのデータを並べ替える（openpyxlで実装）
-
-    Args:
-        worksheet: openpyxlのワークシートオブジェクト
-    """
-    # データ部分（ヘッダー以外）を取得
     data_rows = list(worksheet.iter_rows(min_row=2, values_only=True))
 
-    # データがない場合は何もしない
     if not data_rows:
         return
 
-    # 並べ替え：預り日(0列目)昇順 → 診療科(4列目)昇順 → 患者ID(1列目)昇順
     sorted_rows = sorted(data_rows, key=lambda x: (
         x[0] or datetime.datetime.min if isinstance(x[0], datetime.datetime) else str(x[0] or ""),  # 預り日
         x[4] or "",  # 診療科
@@ -80,29 +52,19 @@ def sort_worksheet_data(worksheet):
 
 
 def process_medical_documents(source_file, target_file):
-    """
-    バックアップファイルからデータを取り込み、重複行と空欄行を削除する
-
-    Args:
-        source_file (str): バックアップファイルのパス
-        target_file (str): ターゲットデータベースファイルのパス
-    """
-    print(f"処理を開始: {source_file} から {target_file} へデータを取り込みます")
-
-    # バックアップファイルを読み込む
     try:
         source_wb = openpyxl.load_workbook(source_file)
         source_sheet = source_wb.active
 
-        # バックアップファイルのデータをリストに変換（A列からI列まで）
+        # ソースファイルからデータを読み込む
         if source_sheet.max_row > 0:  # シートが空でないことを確認
-            headers = [cell.value for cell in source_sheet[1][0:9] if cell.value is not None]  # A-I列 (0-8)
+            headers = [cell.value for cell in source_sheet[1][0:9] if cell.value is not None]  # A-I列
 
             data = []
-            for row in source_sheet.iter_rows(min_row=2, max_col=9):  # A-I列まで
+            for row in source_sheet.iter_rows(min_row=2, max_col=9):
                 processed_row = []
                 for idx, cell in enumerate(row):
-                    # 日付セルの特別処理
+                    # 日付セルの処理
                     if cell.column == 1 and cell.value:  # A列（預り日）
                         if isinstance(cell.value, (datetime.datetime, datetime.date)):
                             # 日付オブジェクトを文字列に変換
@@ -130,25 +92,22 @@ def process_medical_documents(source_file, target_file):
                         processed_row.append(cell.value)
                 data.append(processed_row)
 
-            # Polarsデータフレームに変換
             df = pl.DataFrame(data, schema=headers, orient="row")
 
-            print(f"バックアップファイルから {len(df)} 行のデータを読み込みました")
+            print(f"ソースファイルから {len(df)} 行のデータを読み込みました")
 
-            # ターゲットファイルが存在する場合、そのデータを読み込む
             if os.path.exists(target_file):
                 target_wb = openpyxl.load_workbook(target_file)
                 target_sheet = target_wb.active
 
-                if target_sheet.max_row > 0:  # シートが空でないことを確認
+                if target_sheet.max_row > 0:
                     target_headers = [cell.value for cell in target_sheet[1][0:9] if
-                                      cell.value is not None]  # A-I列 (0-8)
+                                      cell.value is not None]
 
                     target_data = []
-                    for row in target_sheet.iter_rows(min_row=2, max_col=9):  # A-I列まで
+                    for row in target_sheet.iter_rows(min_row=2, max_col=9):
                         processed_row = []
                         for idx, cell in enumerate(row):
-                            # 日付セルの特別処理
                             if cell.column == 1 and cell.value:  # A列（預り日）
                                 if isinstance(cell.value, (datetime.datetime, datetime.date)):
                                     # 日付オブジェクトを文字列に変換
@@ -181,10 +140,6 @@ def process_medical_documents(source_file, target_file):
                     # ターゲットシートが空の場合は空のデータフレームを作成
                     target_df = pl.DataFrame(schema=headers)
 
-                print(f"ターゲットファイルから {len(target_df)} 行のデータを読み込みました")
-
-                # スキーマの統一を確保
-                # 両方のデータフレームのすべての列を文字列型に変換
                 df = df.select([pl.col(col).cast(pl.Utf8) for col in df.columns])
 
                 if len(target_df) > 0:
@@ -192,9 +147,7 @@ def process_medical_documents(source_file, target_file):
 
                     # 列名が同じことを確保
                     if set(df.columns) == set(target_df.columns):
-                        # 同じ列の順序で揃える
                         target_df = target_df.select(df.columns)
-                        # データを結合
                         df = pl.concat([df, target_df])
                     else:
                         print(f"警告: ソースとターゲットのカラム構造が異なります。")
@@ -210,7 +163,6 @@ def process_medical_documents(source_file, target_file):
 
             # 医師依頼日が空欄の行を削除
             if "医師依頼日" in df.columns:
-                # 文字列型に変換してから比較
                 df = df.with_columns([
                     pl.col("医師依頼日").cast(pl.Utf8).fill_null("").alias("医師依頼日")
                 ])
@@ -222,7 +174,6 @@ def process_medical_documents(source_file, target_file):
 
             # 担当者名が空欄の行を削除
             if "担当者名" in df.columns:
-                # 文字列型に変換してから比較
                 df = df.with_columns([
                     pl.col("担当者名").cast(pl.Utf8).fill_null("").alias("担当者名")
                 ])
@@ -232,7 +183,6 @@ def process_medical_documents(source_file, target_file):
                 print("警告: '担当者名'の列が見つかりません。この条件でのフィルタリングをスキップします。")
 
             # 重複行を削除（預り日、患者ID、文書名、診療科、医師名の組み合わせが同じ行）
-            # まず必要な列が存在するか確認
             required_columns = ["預り日", "患者ID", "文書名", "診療科", "医師名"]
             missing_columns = [col for col in required_columns if col not in df.columns]
 
@@ -317,19 +267,9 @@ def process_medical_documents(source_file, target_file):
                         else:
                             cell.value = value
 
-            # データを並べ替え
-            print("データを並べ替えます...")
             sort_worksheet_data(result_sheet)
-
-            # セルの書式を適用
-            print("セルの書式を適用します...")
             apply_cell_formats(result_sheet, 2)  # 2行目（データ行の開始）から適用
 
-            # 不要なデフォルトシートを削除（新規作成時のみ）
-            if 'Sheet' in result_wb.sheetnames and len(result_wb.sheetnames) > 1:
-                del result_wb['Sheet']
-
-            # ファイルを保存
             result_wb.save(target_file)
 
             print(f"処理完了: {len(df)} 行のデータを {target_file} に保存しました")
