@@ -15,7 +15,8 @@ class MedicalDocsAnalyzer:
             template_path = self.paths_config['template_path']
 
             # 医療文書の分析を実行
-            analyze_medical_documents(database_path, template_path)
+            # 開始日と終了日のパラメータを追加
+            analyze_medical_documents(database_path, template_path, start_date_str, end_date_str)
 
             return True, "集計が完了しました。"
 

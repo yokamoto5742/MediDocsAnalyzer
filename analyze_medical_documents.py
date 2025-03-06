@@ -8,7 +8,7 @@ from shutil import copyfile
 from config_manager import load_config, get_ordered_names
 
 
-def analyze_medical_documents(file_path, excel_template_path):
+def analyze_medical_documents(file_path, excel_template_path, start_date_str=None, end_date_str=None):
     # configをここで読み込む
     config = load_config()
 
@@ -44,34 +44,65 @@ def analyze_medical_documents(file_path, excel_template_path):
             .alias('預り日')
         )
 
-        valid_dates = df.filter(pl.col('預り日').is_not_null()).select('預り日')
-        if valid_dates.height == 0:
-            print("有効な日付データがありません。")
-            return
+        # 日付範囲でフィルタリング
+        if start_date_str and end_date_str:
+            # 文字列の日付をdatetime型に変換
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
 
-        # 日付データが文字列の場合は、datetime型に変換してから処理
-        min_date = valid_dates.select(pl.col('預り日').min()).item()
-        max_date = valid_dates.select(pl.col('預り日').max()).item()
+            # 日付型の場合とstr型の場合の両方に対応
+            df = df.with_columns([
+                pl.when(pl.col('預り日').cast(pl.Utf8).str.contains('-'))
+                .then(pl.col('預り日').cast(pl.Utf8).str.replace('-', '/'))
+                .otherwise(pl.col('預り日'))
+                .alias('預り日')
+            ])
 
-        # 日付フォーマットの処理（文字列か日付型かを判断）
-        if isinstance(min_date, str):
-            # 文字列の場合はdatetimeに変換
-            try:
-                min_date_obj = datetime.strptime(min_date, '%Y/%m/%d')
-                max_date_obj = datetime.strptime(max_date, '%Y/%m/%d')
-                start_date = min_date_obj.strftime('%Y年%m月%d日')
-                end_date = max_date_obj.strftime('%Y年%m月%d日')
-                file_date_range = f"{min_date_obj.strftime('%Y%m%d')}-{max_date_obj.strftime('%Y%m%d')}"
-            except ValueError:
-                # 日付形式が違う場合はそのまま使用
-                start_date = min_date
-                end_date = max_date
-                file_date_range = f"{start_date}-{end_date}".replace('/', '')
+            # 日付でフィルタリング
+            df = df.filter(
+                (pl.col('預り日') >= start_date.strftime('%Y/%m/%d')) &
+                (pl.col('預り日') <= end_date.strftime('%Y/%m/%d'))
+            )
+
+            # フィルタリング後のデータ確認
+            if df.height == 0:
+                print(f"指定された期間 {start_date_str} から {end_date_str} のデータはありません。")
+                return
+
+            # 指定された日付範囲を使用
+            file_date_range = f"{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
+            start_date_display = start_date.strftime('%Y年%m月%d日')
+            end_date_display = end_date.strftime('%Y年%m月%d日')
         else:
-            # datetimeオブジェクトの場合はstrftimeを使用
-            start_date = min_date.strftime('%Y年%m月%d日')
-            end_date = max_date.strftime('%Y年%m月%d日')
-            file_date_range = f"{min_date.strftime('%Y%m%d')}-{max_date.strftime('%Y%m%d')}"
+            # 従来の処理（全期間）
+            valid_dates = df.filter(pl.col('預り日').is_not_null()).select('預り日')
+            if valid_dates.height == 0:
+                print("有効な日付データがありません。")
+                return
+
+            # 日付データが文字列の場合は、datetime型に変換してから処理
+            min_date = valid_dates.select(pl.col('預り日').min()).item()
+            max_date = valid_dates.select(pl.col('預り日').max()).item()
+
+            # 日付フォーマットの処理（文字列か日付型かを判断）
+            if isinstance(min_date, str):
+                # 文字列の場合はdatetimeに変換
+                try:
+                    min_date_obj = datetime.strptime(min_date, '%Y/%m/%d')
+                    max_date_obj = datetime.strptime(max_date, '%Y/%m/%d')
+                    start_date_display = min_date_obj.strftime('%Y年%m月%d日')
+                    end_date_display = max_date_obj.strftime('%Y年%m月%d日')
+                    file_date_range = f"{min_date_obj.strftime('%Y%m%d')}-{max_date_obj.strftime('%Y%m%d')}"
+                except ValueError:
+                    # 日付形式が違う場合はそのまま使用
+                    start_date_display = min_date
+                    end_date_display = max_date
+                    file_date_range = f"{start_date_display}-{end_date_display}".replace('/', '')
+            else:
+                # datetimeオブジェクトの場合はstrftimeを使用
+                start_date_display = min_date.strftime('%Y年%m月%d日')
+                end_date_display = max_date.strftime('%Y年%m月%d日')
+                file_date_range = f"{min_date.strftime('%Y%m%d')}-{max_date.strftime('%Y%m%d')}"
 
         # 担当者と診療科で集計
         grouped = df.filter(
@@ -111,7 +142,7 @@ def analyze_medical_documents(file_path, excel_template_path):
         ).unique().sort('診療科').to_series().to_list()
 
         output_excel(excel_template_path, staff_members, departments, grouped, staff_totals,
-                     dept_totals, start_date, end_date, file_date_range)
+                     dept_totals, start_date_display, end_date_display, file_date_range)
 
     except FileNotFoundError:
         print(f"エラー: ファイル '{file_path}' が見つかりません。")
@@ -183,9 +214,8 @@ def output_excel(excel_template_path, staff_members, departments, grouped_data, 
         total_docs = staff_totals.select('作成件数').sum().item()
         sheet.cell(row=total_row, column=len(departments) + 2).value = total_docs
 
-        # ファイルを保存
         workbook.save(output_file)
-        print(f"集計結果を '{output_file}' に保存しました。")
+        os.system(f'start excel.exe "{output_file}"')
 
     except Exception as e:
         print(f"エラー: Excelファイルの出力中に問題が発生しました - {str(e)}")
@@ -197,4 +227,9 @@ if __name__ == "__main__":
     ordered_names = get_ordered_names(config)
     database_path = config['PATHS']['database_path']
     template_path = config['PATHS']['template_path']
-    analyze_medical_documents(database_path, template_path)
+
+    # コンフィグから日付範囲を取得
+    start_date = config['Analysis'].get('start_date', None)
+    end_date = config['Analysis'].get('end_date', None)
+
+    analyze_medical_documents(database_path, template_path, start_date, end_date)
