@@ -153,15 +153,19 @@ def analyze_medical_documents(file_path, excel_template_path, start_date_str=Non
 def output_excel(excel_template_path, staff_members, departments, grouped_data, staff_totals,
                  dept_totals, start_date, end_date, file_date_range):
     try:
-        output_file = f"医療文書作成件数{file_date_range}.xlsx"
+        config = load_config()
+        output_dir = config['PATHS']['output_dir']
 
-        # テンプレートが存在する場合はコピー、存在しない場合は新規作成
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        output_file = os.path.join(output_dir, f"医療文書作成件数{file_date_range}.xlsx")
+
         if os.path.exists(excel_template_path):
             copyfile(excel_template_path, output_file)
             workbook = openpyxl.load_workbook(output_file)
             sheet = workbook.active
         else:
-            print(f"警告: テンプレートファイル '{excel_template_path}' が見つかりません。新規ファイルを作成します。")
             workbook = openpyxl.Workbook()
             sheet = workbook.active
 
