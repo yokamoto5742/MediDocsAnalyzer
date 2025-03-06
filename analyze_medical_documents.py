@@ -9,7 +9,6 @@ from config_manager import load_config, get_ordered_names
 
 
 def analyze_medical_documents(file_path, excel_template_path, start_date_str=None, end_date_str=None):
-    # configをここで読み込む
     config = load_config()
 
     try:

@@ -4,8 +4,28 @@ from openpyxl.styles import Alignment
 from pathlib import Path
 import os
 import datetime
+import shutil
 
 from config_manager import load_config
+
+
+def backup_excel_file(file_path, backup_dir):
+    try:
+        backup_dir_path = Path(backup_dir)
+        if not backup_dir_path.exists():
+            backup_dir_path.mkdir(parents=True, exist_ok=True)
+
+
+        file_name = Path(file_path).name
+        backup_file_name = f"backup_{file_name}"
+        backup_path = backup_dir_path / backup_file_name
+
+        shutil.copy2(file_path, backup_path)
+        print(f"バックアップを作成しました: {backup_path}")
+        return str(backup_path)
+    except Exception as e:
+        print(f"バックアップ作成中にエラーが発生しました: {str(e)}")
+        return None
 
 
 def get_last_row(worksheet):
@@ -84,8 +104,17 @@ def read_excel_data(sheet, headers):
         data.append(processed_row)
     return pl.DataFrame(data, schema=headers, orient="row")
 
+
 def process_medical_documents(source_file, target_file):
     try:
+        config = load_config()
+        backup_dir = config['PATHS']['backup_dir']
+
+        if os.path.exists(target_file):
+            backup_result = backup_excel_file(target_file, backup_dir)
+            if not backup_result:
+                print("警告: バックアップの作成に失敗しました。処理を続行します。")
+
         source_wb = openpyxl.load_workbook(source_file)
         source_sheet = source_wb.active
 
