@@ -169,16 +169,22 @@ def output_excel(excel_template_path, staff_members, departments, grouped_data, 
             sheet['A2'] = "氏名"
             for col_idx, dept in enumerate(departments, 2):
                 sheet.cell(row=2, column=col_idx).value = dept
-            sheet.cell(row=2, column=len(departments) + 2).value = "合計"
 
         # データの書き込み
         for row_idx, staff in enumerate(staff_members, 3):
             # 担当者名
             sheet.cell(row=row_idx, column=1).value = staff
 
-            # 各診療科の件数
+            # 各診療科の件数（「合計」列があれば計算）
             staff_total = 0
+            has_total_column = '合計' in departments
+            total_column_idx = departments.index('合計') + 2 if has_total_column else 0
+
             for col_idx, dept in enumerate(departments, 2):
+                if dept == '合計':
+                    # 合計列は後で設定するのでスキップ
+                    continue
+
                 # この担当者×診療科の件数を取得
                 filtered_data = grouped_data.filter(
                     (pl.col('担当者名') == staff) & (pl.col('診療科') == dept)
@@ -191,8 +197,9 @@ def output_excel(excel_template_path, staff_members, departments, grouped_data, 
                 else:
                     sheet.cell(row=row_idx, column=col_idx).value = 0
 
-            # 合計
-            sheet.cell(row=row_idx, column=len(departments) + 2).value = staff_total
+            # 合計列がある場合はその位置に合計を設定
+            if has_total_column:
+                sheet.cell(row=row_idx, column=total_column_idx).value = staff_total
 
         # 合計行
         total_row = len(staff_members) + 3
@@ -200,15 +207,20 @@ def output_excel(excel_template_path, staff_members, departments, grouped_data, 
 
         # 各診療科の合計
         for col_idx, dept in enumerate(departments, 2):
+            if dept == '合計':
+                # 合計列には全体の合計を後で設定
+                continue
+
             dept_data = dept_totals.filter(pl.col('診療科') == dept)
             if dept_data.height > 0:
                 sheet.cell(row=total_row, column=col_idx).value = dept_data.select('作成件数').item()
             else:
                 sheet.cell(row=total_row, column=col_idx).value = 0
 
-        # 全体の合計
+        # 全体の合計（合計列がある場合はその位置に設定）
         total_docs = staff_totals.select('作成件数').sum().item()
-        sheet.cell(row=total_row, column=len(departments) + 2).value = total_docs
+        if has_total_column:
+            sheet.cell(row=total_row, column=total_column_idx).value = total_docs
 
         workbook.save(output_file)
         os.system(f'start excel.exe "{output_file}"')
