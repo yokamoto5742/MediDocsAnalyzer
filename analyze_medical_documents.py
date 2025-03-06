@@ -227,8 +227,6 @@ if __name__ == "__main__":
     ordered_names = get_ordered_names(config)
     database_path = config['PATHS']['database_path']
     template_path = config['PATHS']['template_path']
-
-    # コンフィグから日付範囲を取得
     start_date = config['Analysis'].get('start_date', None)
     end_date = config['Analysis'].get('end_date', None)
 
