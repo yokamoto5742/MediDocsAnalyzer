@@ -1,3 +1,5 @@
+# analyze_medical_documents.py の修正
+
 import openpyxl
 import polars as pl
 import warnings
@@ -9,6 +11,8 @@ from config_manager import load_config, get_ordered_names
 
 
 def analyze_medical_documents(file_path, excel_template_path):
+    # configをここで読み込む
+    config = load_config()
 
     try:
         workbook = openpyxl.load_workbook(file_path, read_only=True)
@@ -97,7 +101,7 @@ def analyze_medical_documents(file_path, excel_template_path):
             pl.col('担当者名').is_not_null()
         ).unique().sort('担当者名').to_series().to_list()
 
-        ordered_names_str = config['Analysis'].get('config_ordered_names', "")
+        ordered_names_str = config['Analysis'].get('ordered_names', "")
         config_ordered_names = [name.strip() for name in ordered_names_str.split(',')] if ordered_names_str else []
 
         # リストを指定された順序に並べ替え（データにない名前は無視）

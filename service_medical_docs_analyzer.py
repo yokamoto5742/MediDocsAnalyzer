@@ -1,5 +1,6 @@
 from datetime import datetime
 from config_manager import load_config
+from analyze_medical_documents import analyze_medical_documents
 
 
 class MedicalDocsAnalyzer:
@@ -9,31 +10,14 @@ class MedicalDocsAnalyzer:
 
     def run_analysis(self, start_date_str, end_date_str):
         try:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+            # 設定ファイルからパスを取得
+            database_path = self.paths_config['database_path']
+            template_path = self.paths_config['template_path']
 
-            tasks, daily_tasks, comm_tasks, all_items, actual_start_date_str, actual_end_date_str = self.reader.read_workbook(
-                self.paths_config['input_file_path'],
-                start_date,
-                end_date
-            )
+            # 医療文書の分析を実行
+            analyze_medical_documents(database_path, template_path)
 
-            actual_start_date = datetime.strptime(actual_start_date_str, '%Y%m%d')
-            actual_end_date = datetime.strptime(actual_end_date_str, '%Y%m%d')
-
-            analysis_results = self.analyzer.analyze_task_data(
-                tasks, daily_tasks, comm_tasks, all_items
-            )
-
-            output_file = self.writer.save_results(
-                analysis_results,
-                self.paths_config['excel_template_path'],
-                self.paths_config['output_dir'],
-                actual_start_date,
-                actual_end_date
-            )
-
-            return True, f"分析が完了しました。結果は {output_file} に保存されました。"
+            return True, "集計が完了しました。"
 
         except ValueError as ve:
             return False, f"日付の形式が正しくありません: {str(ve)}"
