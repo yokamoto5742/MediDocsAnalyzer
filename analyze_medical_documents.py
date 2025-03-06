@@ -125,21 +125,13 @@ def analyze_medical_documents(file_path, excel_template_path, start_date_str=Non
             pl.len().alias('作成件数')
         ).sort('作成件数', descending=True)
 
-        # 担当者のリストを取得（None値を除外）
-        staff_members = df.select('担当者名').filter(
-            pl.col('担当者名').is_not_null()
-        ).unique().sort('担当者名').to_series().to_list()
-
+        # configから担当者リストを取得
         ordered_names_str = config['Analysis'].get('ordered_names', "")
-        config_ordered_names = [name.strip() for name in ordered_names_str.split(',')] if ordered_names_str else []
+        staff_members = [name.strip() for name in ordered_names_str.split(',')] if ordered_names_str else []
 
-        # リストを指定された順序に並べ替え（データにない名前は無視）
-        staff_members = [name for name in config_ordered_names if name in staff_members]
-
-        # 診療科のリストを取得（None値を除外）
-        departments = df.select('診療科').filter(
-            pl.col('診療科').is_not_null()
-        ).unique().sort('診療科').to_series().to_list()
+        # configから診療科のリストを取得
+        config_departments_str = config['Analysis'].get('clinical_departments', "")
+        departments = [dept.strip() for dept in config_departments_str.split(',')] if config_departments_str else []
 
         output_excel(excel_template_path, staff_members, departments, grouped, staff_totals,
                      dept_totals, start_date_display, end_date_display, file_date_range)
