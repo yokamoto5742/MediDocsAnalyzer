@@ -15,7 +15,7 @@ def mock_tk():
 
 @pytest.fixture
 def mock_gui():
-    with patch('main.TaskAnalyzerGUI') as mock:
+    with patch('main.MedicalDocsAnalyzerGUI') as mock:
         yield mock
 
 

@@ -10,7 +10,7 @@ from version import VERSION
 from service_medical_docs_analyzer import MedicalDocsAnalyzer
 
 
-class TaskAnalyzerGUI:
+class MedicalDocsAnalyzerGUI:
     def __init__(self, root):
         self.root = root
         self.root.title(f'業務分析 v{VERSION}')
@@ -47,7 +47,7 @@ class TaskAnalyzerGUI:
         self.end_date.grid(row=1, column=1, padx=5, pady=5)
 
     def _setup_buttons(self, parent):
-        ttk.Button(parent, text="分析開始", command=self.start_analysis).grid(
+        ttk.Button(parent, text="集計開始", command=self.start_analysis).grid(
             row=3, column=0, columnspan=2, pady=10)
         ttk.Button(parent, text="設定ファイル", command=self.open_config).grid(
             row=4, column=0, columnspan=2, pady=5)

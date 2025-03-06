@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch, mock_open
 from datetime import datetime
 import configparser
 import os
-from app_window import TaskAnalyzerGUI
+from app_window import MedicalDocsAnalyzerGUI
 from version import VERSION
 
 
@@ -87,7 +87,7 @@ def gui(mock_tk, mock_config, mock_analyzer, mock_date_entry):
             patch('app_window.ttk.LabelFrame'), \
             patch('app_window.ttk.Label'), \
             patch('app_window.ttk.Button'):
-        gui = TaskAnalyzerGUI(mock_tk)
+        gui = MedicalDocsAnalyzerGUI(mock_tk)
         yield gui
 
 

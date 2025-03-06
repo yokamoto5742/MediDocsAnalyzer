@@ -1,11 +1,11 @@
 import tkinter as tk
-from app_window import TaskAnalyzerGUI
+from app_window import MedicalDocsAnalyzerGUI
 from version import VERSION
 
 
 def main():
     root = tk.Tk()
-    TaskAnalyzerGUI(root)
+    MedicalDocsAnalyzerGUI(root)
     root.mainloop()
 
 if __name__ == "__main__":

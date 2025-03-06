@@ -78,14 +78,14 @@ python main.py
 
 ## 開発者向け情報
 ### コードの構成
-- `TaskAnalyzerGUI`: GUIの作成と管理を担当
+- `MedicalDocsAnalyzerGUI`: GUIの作成と管理を担当
 - `MedicalDocsAnalyzer`: 分析処理全体の統括
 - `ExcelTaskReader`: Excelファイルからのデータ読み込み
 - `DataAnalyzer`: Polarsを使ったデータフレーム操作と集計
 - `ExcelResultWriter`: 分析結果のExcel出力
 
 ### データフロー
-1. `TaskAnalyzerGUI`がユーザー入力を受け取り`MedicalDocsAnalyzer`に処理を依頼
+1. `MedicalDocsAnalyzerGUI`がユーザー入力を受け取り`MedicalDocsAnalyzer`に処理を依頼
 2. `MedicalDocsAnalyzer`は`ExcelTaskReader`を使ってデータを読み込み
 3. 読み込んだデータを`DataAnalyzer`を使って分析
 4. 分析結果を`ExcelResultWriter`を使ってExcelファイルに出力
