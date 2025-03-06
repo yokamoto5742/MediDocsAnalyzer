@@ -1,5 +1,3 @@
-# analyze_medical_documents.py の修正
-
 import openpyxl
 import polars as pl
 import warnings
