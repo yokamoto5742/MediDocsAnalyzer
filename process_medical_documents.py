@@ -110,11 +110,6 @@ def process_medical_documents(source_file, target_file):
         config = load_config()
         backup_dir = config['PATHS']['backup_dir']
 
-        if os.path.exists(target_file):
-            backup_result = backup_excel_file(target_file, backup_dir)
-            if not backup_result:
-                print("警告: バックアップの作成に失敗しました。処理を続行します。")
-
         source_wb = openpyxl.load_workbook(source_file)
         source_sheet = source_wb.active
 
@@ -267,6 +262,13 @@ def process_medical_documents(source_file, target_file):
             apply_cell_formats(result_sheet, 2)  # 2行目（データ行の開始）から適用
 
             result_wb.save(target_file)
+
+            # 処理後のファイルをバックアップ
+            backup_result = backup_excel_file(target_file, backup_dir)
+            if backup_result:
+                print(f"処理後のファイルをバックアップしました: {backup_result}")
+            else:
+                print("警告: 処理後のファイルのバックアップに失敗しました。")
 
             print(f"処理完了: {len(df)} 行のデータを {target_file} に保存しました")
             return True
