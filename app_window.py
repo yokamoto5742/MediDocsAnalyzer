@@ -1,20 +1,21 @@
-import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
-from tkcalendar import DateEntry
-from datetime import datetime
 import subprocess
+from datetime import datetime
+
+import tkinter as tk
+from tkcalendar import DateEntry
+from tkinter import messagebox
+from tkinter import ttk
 
 from config_manager import load_config, save_config
-from version import VERSION
 from service_medical_docs_analyzer import MedicalDocsAnalyzer
 from service_process_medical_documents import process_medical_documents
+from version import VERSION
 
 
 class MedicalDocsAnalyzerGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title(f'医療文書集計 v{VERSION}')  # タイトルを「医療文書集計」に変更
+        self.root.title(f'医療文書集計 v{VERSION}')
         self.config = load_config()
         self.analyzer = MedicalDocsAnalyzer()
 
@@ -37,7 +38,6 @@ class MedicalDocsAnalyzerGUI:
 
         ttk.Label(date_frame, text="開始日").grid(row=0, column=0, padx=5, pady=5)
 
-        # 開始日の初期値をコンフィグから取得
         start_date_str = self.config.get('Analysis', 'start_date', fallback='2025-01-01')
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
 
@@ -47,10 +47,9 @@ class MedicalDocsAnalyzerGUI:
                                     locale='ja_JP', date_pattern='yyyy/mm/dd')
         self.start_date.grid(row=0, column=1, padx=5, pady=5)
 
-        ttk.Label(date_frame, text="終了日:").grid(row=1, column=0, padx=5, pady=5)
+        ttk.Label(date_frame, text="終了日").grid(row=1, column=0, padx=5, pady=5)
 
-        # 終了日の初期値をコンフィグから取得
-        end_date_str = self.config.get('Analysis', 'end_date', fallback='2025-01-31')
+        end_date_str = self.config.get('Analysis', 'end_date', fallback='2025-12-31')
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
 
         self.end_date = DateEntry(date_frame, width=12, background='darkblue',
@@ -60,10 +59,8 @@ class MedicalDocsAnalyzerGUI:
         self.end_date.grid(row=1, column=1, padx=5, pady=5)
 
     def _setup_buttons(self, parent):
-        # データ読込ボタンを追加
         ttk.Button(parent, text="データ読込", command=self.load_data).grid(
             row=2, column=0, columnspan=2, pady=10)
-
         ttk.Button(parent, text="集計開始", command=self.start_analysis).grid(
             row=3, column=0, columnspan=2, pady=10)
         ttk.Button(parent, text="設定ファイル", command=self.open_config).grid(
