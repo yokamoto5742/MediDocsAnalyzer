@@ -8,7 +8,7 @@ import subprocess
 from config_manager import load_config, save_config
 from version import VERSION
 from service_medical_docs_analyzer import MedicalDocsAnalyzer
-from process_medical_documents import process_medical_documents
+from service_process_medical_documents import process_medical_documents
 
 
 class MedicalDocsAnalyzerGUI:

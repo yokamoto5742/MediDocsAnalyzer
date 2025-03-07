@@ -1,6 +1,6 @@
 from datetime import datetime
 from config_manager import load_config
-from analyze_medical_documents import analyze_medical_documents
+from service_analyze_medical_documents import analyze_medical_documents
 
 
 class MedicalDocsAnalyzer:
