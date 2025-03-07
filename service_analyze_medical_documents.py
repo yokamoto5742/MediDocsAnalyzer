@@ -252,15 +252,3 @@ def output_excel(excel_template_path, staff_members, departments, grouped_data, 
 
     except Exception as e:
         print(f"エラー: Excelファイルの出力中に問題が発生しました - {str(e)}")
-
-
-# 使用例
-if __name__ == "__main__":
-    config = load_config()
-    ordered_names = get_ordered_names(config)
-    database_path = config['PATHS']['database_path']
-    template_path = config['PATHS']['template_path']
-    start_date = config['Analysis'].get('start_date', None)
-    end_date = config['Analysis'].get('end_date', None)
-
-    analyze_medical_documents(database_path, template_path, start_date, end_date)
