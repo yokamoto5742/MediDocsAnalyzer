@@ -68,10 +68,36 @@ def analyze_medical_documents(file_path, excel_template_path, start_date_str=Non
                 print(f"指定された期間 {start_date_str} から {end_date_str} のデータはありません。")
                 return
 
-            # 指定された日付範囲を使用
-            file_date_range = f"{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
-            start_date_display = start_date.strftime('%Y年%m月%d日')
-            end_date_display = end_date.strftime('%Y年%m月%d日')
+            # フィルタリングされたデータから実際の日付範囲を取得
+            valid_dates = df.filter(pl.col('預り日').is_not_null()).select('預り日')
+            min_date = valid_dates.select(pl.col('預り日').min()).item()
+            max_date = valid_dates.select(pl.col('預り日').max()).item()
+
+            # 日付フォーマットの処理（文字列か日付型かを判断）
+            if isinstance(min_date, str):
+                # 文字列の場合はdatetimeに変換
+                try:
+                    min_date_obj = datetime.strptime(min_date, '%Y/%m/%d')
+                    max_date_obj = datetime.strptime(max_date, '%Y/%m/%d')
+                    actual_start_date = min_date_obj.strftime('%Y%m%d')
+                    actual_end_date = max_date_obj.strftime('%Y%m%d')
+                    start_date_display = min_date_obj.strftime('%Y年%m月%d日')
+                    end_date_display = max_date_obj.strftime('%Y年%m月%d日')
+                except ValueError:
+                    # 日付形式が違う場合はそのまま使用
+                    actual_start_date = min_date.replace('/', '')
+                    actual_end_date = max_date.replace('/', '')
+                    start_date_display = min_date
+                    end_date_display = max_date
+            else:
+                # datetimeオブジェクトの場合はstrftimeを使用
+                actual_start_date = min_date.strftime('%Y%m%d')
+                actual_end_date = max_date.strftime('%Y%m%d')
+                start_date_display = min_date.strftime('%Y年%m月%d日')
+                end_date_display = max_date.strftime('%Y年%m月%d日')
+
+            # 実際のデータ範囲を使用
+            file_date_range = f"{actual_start_date}-{actual_end_date}"
         else:
             # 従来の処理（全期間）
             valid_dates = df.filter(pl.col('預り日').is_not_null()).select('預り日')
