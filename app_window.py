@@ -68,30 +68,24 @@ class MedicalDocsAnalyzerGUI:
         ttk.Button(parent, text="閉じる", command=self.root.quit).grid(
             row=5, column=0, columnspan=2, pady=5)
 
-    # データ読込機能を追加
     def load_data(self):
-        """GUIからデータ読込を開始するメソッド"""
         try:
-            # 設定ファイルからパスを取得
             source_file_path = self.config.get('PATHS', 'source_file_path')
             database_path = self.config.get('PATHS', 'database_path')
 
-            # 日付をコンフィグに保存
             self.save_date_to_config()
 
-            # データ処理を実行
             success = process_medical_documents(source_file_path, database_path)
 
             if success:
-                messagebox.showinfo("成功", "データの読込が完了しました。")
+                messagebox.showinfo("完了", "データ読込が完了しました。")
             else:
-                messagebox.showerror("エラー", "データの読込中にエラーが発生しました。")
+                messagebox.showerror("エラー", "データ読込中にエラーが発生しました。")
 
         except Exception as e:
             messagebox.showerror("エラー", f"データ読込中に予期せぬエラーが発生しました：\n{str(e)}")
 
     def save_date_to_config(self):
-        """日付設定をコンフィグに保存するメソッド"""
         start_date = self.start_date.get_date()
         end_date = self.end_date.get_date()
 
@@ -99,7 +93,6 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror("エラー", "開始日が終了日より後の日付になっています。")
             return False
 
-        # 設定の保存
         if 'Analysis' not in self.config:
             self.config.add_section('Analysis')
 
@@ -111,25 +104,17 @@ class MedicalDocsAnalyzerGUI:
         return True
 
     def start_analysis(self):
-        """GUIから分析を開始するメソッド"""
         try:
-            # 日付をコンフィグに保存
             if not self.save_date_to_config():
                 return
 
             start_date = self.start_date.get_date()
             end_date = self.end_date.get_date()
 
-            # 分析の実行
-            success, error_message = self.analyzer.run_analysis(
+            self.analyzer.run_analysis(
                 start_date.strftime('%Y-%m-%d'),
                 end_date.strftime('%Y-%m-%d')
             )
-
-            if not success:
-                messagebox.showerror("エラー", error_message)
-            else:
-                messagebox.showinfo("成功", error_message)
 
         except Exception as e:
             messagebox.showerror("エラー", f"予期せぬエラーが発生しました：\n{str(e)}")
