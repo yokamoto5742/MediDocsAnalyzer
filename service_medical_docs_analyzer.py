@@ -6,15 +6,15 @@ import openpyxl
 import polars as pl
 
 from config_manager import load_config
-from service_excel_handler import read_excel_to_dataframe
 from service_data_processor import filter_dataframe_by_date_range
+from service_excel_handler import read_excel_to_dataframe
 
 
 def analyze_medical_documents(file_path, excel_template_path, start_date_str=None, end_date_str=None):
     config = load_config()
 
     try:
-        # データの読み込み
+
         df, _ = read_excel_to_dataframe(file_path)
 
         # 必要なカラムの確認
@@ -48,7 +48,7 @@ def analyze_medical_documents(file_path, excel_template_path, start_date_str=Non
             pl.len().alias('作成件数')
         ).sort('作成件数', descending=True)
 
-        # 設定からスタッフと診療科の情報を取得
+        # configからスタッフと診療科の情報を取得
         ordered_names_str = config['Analysis'].get('ordered_names', "")
         staff_members = [name.strip() for name in ordered_names_str.split(',')] if ordered_names_str else []
 
@@ -142,25 +142,11 @@ def output_excel(excel_template_path, staff_members, departments, grouped_data, 
 
 
 class MedicalDocsAnalyzer:
-    """
-    医療文書分析の実行を管理するクラス
-    """
-
     def __init__(self):
         self.config = load_config()
         self.paths_config = self.config['PATHS']
 
     def run_analysis(self, start_date_str, end_date_str):
-        """
-        指定された日付範囲で分析を実行する
-
-        Args:
-            start_date_str: 開始日（YYYY-MM-DD形式）
-            end_date_str: 終了日（YYYY-MM-DD形式）
-
-        Returns:
-            (成否, メッセージ)のタプル
-        """
         try:
             database_path = self.paths_config['database_path']
             template_path = self.paths_config['template_path']
@@ -173,15 +159,3 @@ class MedicalDocsAnalyzer:
             return False, f"日付の形式が正しくありません: {str(ve)}"
         except Exception as e:
             return False, f"分析中にエラーが発生しました: {str(e)}"
-
-
-# 単独で起動するためのメイン処理
-if __name__ == "__main__":
-    analyzer = MedicalDocsAnalyzer()
-    # 例: 現在の月の分析を実行
-    now = datetime.now()
-    start_date = f"{now.year}-{now.month:02d}-01"
-    end_date = f"{now.year}-{now.month:02d}-{now.day:02d}"
-
-    success, message = analyzer.run_analysis(start_date, end_date)
-    print(message)
