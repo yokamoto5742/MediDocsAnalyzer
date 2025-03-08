@@ -1,10 +1,11 @@
-import polars as pl
+import datetime
+import os
+from pathlib import Path
+import shutil
+
 import openpyxl
 from openpyxl.styles import Alignment
-from pathlib import Path
-import os
-import datetime
-import shutil
+import polars as pl
 
 from config_manager import load_config
 
@@ -15,13 +16,11 @@ def backup_excel_file(file_path, backup_dir):
         if not backup_dir_path.exists():
             backup_dir_path.mkdir(parents=True, exist_ok=True)
 
-
         file_name = Path(file_path).name
         backup_file_name = f"backup_{file_name}"
         backup_path = backup_dir_path / backup_file_name
 
         shutil.copy2(file_path, backup_path)
-        print(f"バックアップを作成しました: {backup_path}")
         return str(backup_path)
     except Exception as e:
         print(f"バックアップ作成中にエラーが発生しました: {str(e)}")
@@ -72,7 +71,6 @@ def sort_worksheet_data(worksheet):
 
 
 def process_cell_value(cell):
-    """セルの値を適切に処理する関数"""
     if cell.column == 1 and cell.value:  # A列（預り日）
         if isinstance(cell.value, (datetime.datetime, datetime.date)):
             # 日付オブジェクトを文字列に変換
@@ -97,7 +95,6 @@ def process_cell_value(cell):
         return cell.value
 
 def read_excel_data(sheet, headers):
-    """Excelシートからデータを読み込む関数"""
     data = []
     for row in sheet.iter_rows(min_row=2, max_col=9):
         processed_row = [process_cell_value(cell) for cell in row]
@@ -113,12 +110,9 @@ def process_medical_documents(source_file, target_file):
         source_wb = openpyxl.load_workbook(source_file)
         source_sheet = source_wb.active
 
-        # ソースファイルからデータを読み込む
         if source_sheet.max_row > 0:  # シートが空でないことを確認
             headers = [cell.value for cell in source_sheet[1][0:9] if cell.value is not None]  # A-I列
             df = read_excel_data(source_sheet, headers)
-
-            print(f"ソースファイルから {len(df)} 行のデータを読み込みました")
 
             if os.path.exists(target_file):
                 target_wb = openpyxl.load_workbook(target_file)
@@ -146,7 +140,7 @@ def process_medical_documents(source_file, target_file):
                         print(f"ターゲット: {target_df.columns}")
                         print("ソースファイルのデータのみを使用します。")
 
-            # すべての列を文字列型に変換し、空のセルを空文字に
+            # すべての列を文字列型に、空のセルを空文字に変換して処理
             for col in df.columns:
                 df = df.with_columns([
                     pl.col(col).cast(pl.Utf8).fill_null("").alias(col)
@@ -266,9 +260,9 @@ def process_medical_documents(source_file, target_file):
             # 処理後のファイルをバックアップ
             backup_result = backup_excel_file(target_file, backup_dir)
             if backup_result:
-                print(f"処理後のファイルをバックアップしました: {backup_result}")
+                print(f"ファイルをバックアップしました: {backup_result}")
             else:
-                print("警告: 処理後のファイルのバックアップに失敗しました。")
+                print("警告: ファイルのバックアップに失敗しました。")
 
             print(f"処理完了: {len(df)} 行のデータを {target_file} に保存しました")
             return True
@@ -280,7 +274,7 @@ def process_medical_documents(source_file, target_file):
         print(f"エラーが発生しました: {e}")
         return False
 
-
+# 単独で起動するためのメイン処理
 if __name__ == "__main__":
     config = load_config()
     source_file_path = config['PATHS']['source_file_path']
