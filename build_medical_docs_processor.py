@@ -8,11 +8,11 @@ def build_executable():
 
     subprocess.run([
         "pyinstaller",
-        "--name=MedicalDocsAnalyzer",
+        "--name=MedicalDocsProcessor",
         "--windowed",
         "--icon=assets/MedicalDocsAnalyzer.ico",
         "--add-data", "config.ini:.",
-        "process_medical_documents.py"
+        "service_medical_docs_processor.py"
     ])
 
     print(f"Executable built successfully. Version: {new_version}")
