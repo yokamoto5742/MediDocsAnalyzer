@@ -1,6 +1,9 @@
 import subprocess
 from datetime import datetime
 
+import subprocess
+from datetime import datetime
+
 import tkinter as tk
 from tkcalendar import DateEntry
 from tkinter import messagebox
@@ -8,7 +11,7 @@ from tkinter import ttk
 
 from config_manager import load_config, save_config
 from service_medical_docs_analyzer import MedicalDocsAnalyzer
-from service_process_medical_documents import process_medical_documents
+from service_medical_docs_processor import process_medical_documents
 from version import VERSION
 
 
