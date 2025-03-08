@@ -9,16 +9,6 @@ import polars as pl
 
 
 def backup_excel_file(file_path, backup_dir):
-    """
-    Excelファイルをバックアップディレクトリにコピーする
-    
-    Args:
-        file_path: バックアップするファイルのパス
-        backup_dir: バックアップ先ディレクトリ
-        
-    Returns:
-        バックアップファイルのパスまたはNone（エラー時）
-    """
     try:
         backup_dir_path = Path(backup_dir)
         if not backup_dir_path.exists():
@@ -36,15 +26,6 @@ def backup_excel_file(file_path, backup_dir):
 
 
 def get_last_row(worksheet):
-    """
-    ワークシートの最終行番号を取得する
-    
-    Args:
-        worksheet: 対象のワークシート
-        
-    Returns:
-        最終行番号
-    """
     last_row = 0
     for row in worksheet.iter_rows():
         if all(cell.value is None for cell in row):
@@ -54,13 +35,6 @@ def get_last_row(worksheet):
 
 
 def apply_cell_formats(worksheet, start_row):
-    """
-    ワークシートのセル書式を設定する
-    
-    Args:
-        worksheet: 対象のワークシート
-        start_row: 書式適用を開始する行番号
-    """
     last_row = get_last_row(worksheet)
 
     # A列からI列までの範囲を設定
@@ -77,12 +51,6 @@ def apply_cell_formats(worksheet, start_row):
 
 
 def sort_worksheet_data(worksheet):
-    """
-    ワークシートのデータを預り日、診療科、患者IDの順で並べ替える
-    
-    Args:
-        worksheet: 対象のワークシート
-    """
     data_rows = list(worksheet.iter_rows(min_row=2, values_only=True))
 
     if not data_rows:
@@ -101,24 +69,12 @@ def sort_worksheet_data(worksheet):
 
 
 def read_excel_to_dataframe(file_path, process_cell_func=None):
-    """
-    Excelファイルを読み込み、DataFrameに変換する
-    
-    Args:
-        file_path: 対象ファイルのパス
-        process_cell_func: セル値を処理するための関数（オプション）
-        
-    Returns:
-        DataFrame, ヘッダーリスト
-    """
     try:
         workbook = openpyxl.load_workbook(file_path, read_only=True)
         sheet = workbook.active
 
-        # ヘッダーの取得
         headers = [cell.value for cell in sheet[1][0:9] if cell.value is not None]  # A-I列
 
-        # データの読み込み
         data = []
         for row in sheet.iter_rows(min_row=2, max_col=9):
             if process_cell_func:
@@ -134,20 +90,6 @@ def read_excel_to_dataframe(file_path, process_cell_func=None):
 
 
 def write_dataframe_to_excel(df, file_path, headers, create_new=False, format_cells=True, format_func=None):
-    """
-    DataFrameをExcelファイルに書き込む
-    
-    Args:
-        df: 書き込むDataFrame
-        file_path: 出力先ファイルパス
-        headers: 列ヘッダーのリスト
-        create_new: 新規ファイルを作成するかどうか
-        format_cells: セル書式を適用するかどうか
-        format_func: セル値を書き込む前に処理するための関数（オプション）
-        
-    Returns:
-        成功したかどうか（True/False）
-    """
     try:
         if create_new or not os.path.exists(file_path):
             result_wb = openpyxl.Workbook()
