@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 背景円 - 青から濃い緑へ変更 -->
+  <circle cx="128" cy="128" r="120" fill="#065f46"/>
+  <circle cx="128" cy="128" r="110" fill="#064e3b"/>
+  
+  <!-- グラフの背景枠 -->
+  <rect x="68" y="68" width="120" height="120" rx="10" fill="white" opacity="0.9"/>
+  
+  <!-- 棒グラフ要素 -->
+  <rect x="88" y="140" width="20" height="30" fill="#22c55e"/>
+  <rect x="118" y="120" width="20" height="50" fill="#22c55e"/>
+  <rect x="148" y="100" width="20" height="70" fill="#22c55e"/>
+  
+  <!-- 折れ線グラフ -->
+  <path d="M88 110 L118 90 L148 100 L178 80" 
+        stroke="#dc2626" 
+        stroke-width="4" 
+        fill="none"/>
+  
+  <!-- データポイント -->
+  <circle cx="88" cy="110" r="4" fill="#dc2626"/>
+  <circle cx="118" cy="90" r="4" fill="#dc2626"/>
+  <circle cx="148" cy="100" r="4" fill="#dc2626"/>
+  <circle cx="178" cy="80" r="4" fill="#dc2626"/>
+  
+  <!-- 虫眼鏡アイコン - 青から濃い緑へ変更 -->
+  <circle cx="170" cy="170" r="15" 
+          stroke="#064e3b" 
+          stroke-width="6" 
+          fill="none"/>
+  <line x1="180" y1="180" x2="190" y2="190" 
+        stroke="#064e3b" 
+        stroke-width="6" 
+        stroke-linecap="round"/>
+</svg>
