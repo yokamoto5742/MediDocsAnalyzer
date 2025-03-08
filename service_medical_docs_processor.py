@@ -12,28 +12,16 @@ from service_data_processor import (
 
 
 def process_medical_documents(source_file, target_file):
-    """
-    医療文書データを処理する
-    
-    Args:
-        source_file: 入力ファイルパス
-        target_file: 出力ファイルパス
-        
-    Returns:
-        処理の成否（True/False）
-    """
     try:
         config = load_config()
         backup_dir = config['PATHS']['backup_dir']
 
-        # ソースデータの読み込み
         source_df, headers = read_excel_to_dataframe(source_file, process_cell_value)
 
         if source_df.height == 0:
             print("エラー: ソースシートにデータがありません")
             return False
 
-        # ターゲットファイルが存在する場合は読み込んで結合
         if os.path.exists(target_file):
             target_df, target_headers = read_excel_to_dataframe(target_file, process_cell_value)
             
@@ -90,7 +78,6 @@ def process_medical_documents(source_file, target_file):
 
         print(f"重複削除後: {len(df)} 行")
 
-        # 結果をファイルに書き出し
         success = write_dataframe_to_excel(
             df, target_file, headers, 
             create_new=not os.path.exists(target_file),
