@@ -4,20 +4,9 @@ import polars as pl
 
 
 def process_cell_value(cell):
-    """
-    セルの値を適切に処理する
-
-    Args:
-        cell: 処理するセル
-
-    Returns:
-        処理後の値
-    """
-    # セルがNoneまたはEmptyCellの場合は処理しない
     if cell is None:
         return None
 
-    # hasattrを使用してcolumn属性があるか確認
     if not hasattr(cell, 'column'):
         return None
 
@@ -46,15 +35,6 @@ def process_cell_value(cell):
 
 
 def format_date_string(value):
-    """
-    日付文字列を標準形式に変換する
-
-    Args:
-        value: 日付文字列
-
-    Returns:
-        標準化された日付文字列
-    """
     if isinstance(value, str) and value:
         # 日付部分のみを抽出（YYYY-MM-DD または YYYY/MM/DD 形式）
         date_parts = value.split()[0] if ' ' in value else value
@@ -73,16 +53,6 @@ def format_date_string(value):
 
 
 def format_output_cell_value(col_idx, value):
-    """
-    出力用のセル値を書式設定する
-
-    Args:
-        col_idx: 列インデックス
-        value: セルの値
-
-    Returns:
-        書式設定後の値
-    """
     # 1列目（預り日）または8列目（医師依頼日）の場合、日付形式を適用
     if (col_idx == 1 or col_idx == 8) and value:
         return format_date_string(value)
@@ -101,15 +71,6 @@ def format_output_cell_value(col_idx, value):
 
 
 def parse_date_to_formats(date_value):
-    """
-    日付を各種フォーマットに変換する共通関数
-
-    Args:
-        date_value: 変換する日付値
-
-    Returns:
-        各種フォーマットの辞書
-    """
     if date_value is None:
         return {
             'raw': None,
@@ -147,17 +108,6 @@ def parse_date_to_formats(date_value):
 
 
 def filter_dataframe_by_date_range(df, start_date_str=None, end_date_str=None):
-    """
-    データフレームを日付範囲でフィルタリングする
-
-    Args:
-        df: フィルタリングするDataFrame
-        start_date_str: 開始日（YYYY-MM-DD形式）
-        end_date_str: 終了日（YYYY-MM-DD形式）
-
-    Returns:
-        フィルタリング結果と日付情報を含む辞書
-    """
     # データフレームが空の場合は早期リターン
     if df is None or len(df.columns) == 0 or df.height == 0:
         return {
@@ -204,7 +154,6 @@ def filter_dataframe_by_date_range(df, start_date_str=None, end_date_str=None):
             )
         except (ValueError, TypeError) as e:
             print(f"日付フィルタリング中にエラーが発生: {e}")
-            # エラーが発生した場合はフィルタリングせずに続行
 
     # 有効な日付を抽出
     try:
@@ -236,16 +185,6 @@ def filter_dataframe_by_date_range(df, start_date_str=None, end_date_str=None):
 
 
 def clean_and_standardize_dataframe(df):
-    """
-    データフレームをクリーニングして標準化する
-
-    Args:
-        df: 処理するDataFrame
-
-    Returns:
-        処理後のDataFrame
-    """
-    # データフレームが空の場合は早期リターン
     if df is None or len(df.columns) == 0:
         return pl.DataFrame()
 
