@@ -83,7 +83,9 @@ def read_excel_to_dataframe(file_path, process_cell_func=None):
                 processed_row = [cell.value for cell in row]
             data.append(processed_row)
 
-        return pl.DataFrame(data, schema=headers, orient="row"), headers
+        schema = {header: pl.Utf8 for header in headers}
+
+        return pl.DataFrame(data, schema=schema, orient="row"), headers
     except Exception as e:
         print(f"Excelファイルの読み込み中にエラーが発生しました: {str(e)}")
         return pl.DataFrame(), []
