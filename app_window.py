@@ -1,9 +1,6 @@
 import subprocess
 from datetime import datetime
 
-import subprocess
-from datetime import datetime
-
 import tkinter as tk
 from tkcalendar import DateEntry
 from tkinter import messagebox

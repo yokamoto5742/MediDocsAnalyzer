@@ -1,6 +1,5 @@
 import tkinter as tk
 from app_window import MedicalDocsAnalyzerGUI
-from version import VERSION
 
 
 def main():
