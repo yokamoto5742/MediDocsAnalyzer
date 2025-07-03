@@ -102,10 +102,3 @@ def process_medical_documents(source_file, target_file):
         print(f"エラーが発生しました: {str(e)}")
         return False
 
-
-# 単独で起動するためのメイン処理
-if __name__ == "__main__":
-    config = load_config()
-    source_file_path = config['PATHS']['source_file_path']
-    database_path = config['PATHS']['database_path']
-    success = process_medical_documents(source_file_path, database_path)
