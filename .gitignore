@@ -2,9 +2,9 @@ build/
 dist/
 logs/
 .idea/
+__pycache__/
 
+.env
+.coverage
 *.spec
 *.iml
-
-misc.xml
-error_log.txt

@@ -1,17 +1,12 @@
 import subprocess
-from version_manager import update_version, update_version_py
 
 
 def build_executable():
-    new_version = update_version()
-    update_version_py(new_version)
-
     subprocess.run([
         "pyinstaller",
-        "--name=MedicalDocsAnalyzer",
+        "--name=app_name",
         "--windowed",
-        "--icon=assets/MedicalDocsAnalyzer.ico",
-        "--add-data", "config.ini:.",
+        "--add-data", "utils/config.ini:.",
         "main.py"
     ])
 
