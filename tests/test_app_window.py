@@ -1,10 +1,9 @@
 import pytest
-import configparser
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 from app_window import MedicalDocsAnalyzerGUI
-from config_manager import load_config
+from utils.config_manager import load_config
 
 
 def restore_config(config, original_config):

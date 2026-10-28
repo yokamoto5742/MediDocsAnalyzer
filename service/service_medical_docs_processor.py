@@ -2,7 +2,7 @@ import os
 
 import polars as pl
 
-from config_manager import load_config
+from utils.config_manager import load_config
 from service_excel_handler import (
     backup_excel_file, read_excel_to_dataframe, write_dataframe_to_excel
 )

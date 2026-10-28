@@ -4,7 +4,7 @@ from shutil import copyfile
 import openpyxl
 import polars as pl
 
-from config_manager import load_config
+from utils.config_manager import load_config
 from service_data_processor import filter_dataframe_by_date_range
 from service_excel_handler import read_excel_to_dataframe
 

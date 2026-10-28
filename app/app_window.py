@@ -6,7 +6,7 @@ from tkcalendar import DateEntry
 from tkinter import messagebox
 from tkinter import ttk
 
-from config_manager import load_config, save_config
+from utils.config_manager import load_config, save_config
 from service_medical_docs_analyzer import MedicalDocsAnalyzer
 from service_medical_docs_processor import process_medical_documents
 from version import VERSION

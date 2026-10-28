@@ -9,7 +9,7 @@ import openpyxl
 import polars as pl
 
 # テスト対象のモジュールをインポート
-import config_manager
+from utils import config_manager
 from service_medical_docs_processor import process_medical_documents
 
 

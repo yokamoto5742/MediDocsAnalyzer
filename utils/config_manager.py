@@ -1,69 +1,60 @@
 import configparser
 import os
 import sys
-from pathlib import Path
-from typing import Final
+from typing import Any
 
-def get_config_path() -> Path:
-    # 実行ファイルのディレクトリを取得
+
+def get_config_path():
     if getattr(sys, 'frozen', False):
-        base_path = Path(sys._MEIPASS)  # type: ignore[attr-defined]
+        # PyInstallerでビルドされた実行ファイルの場合
+        base_path = sys._MEIPASS
     else:
-        base_path = Path(os.path.dirname(os.path.abspath(__file__)))
-    return base_path / 'config.ini'
+        # 通常のPythonスクリプトとして実行される場合
+        base_path = os.path.dirname(__file__)
 
-CONFIG_PATH: Final[Path] = get_config_path()
+    return os.path.join(base_path, 'config.ini')
 
-class ConfigManager:
-    def __init__(self, config_file: Path | str = CONFIG_PATH) -> None:
-        self.config_file: Path = Path(config_file)
-        self.config: configparser.ConfigParser = configparser.ConfigParser()
-        self.load_config()
-
-    def load_config(self) -> None:
-        if not self.config_file.exists():
-            raise FileNotFoundError(f"Config file not found: {self.config_file}")
-
-        try:
-            self.config.read(self.config_file, encoding='utf-8')
-        except UnicodeDecodeError:
-            try:
-                content: str = self.config_file.read_bytes().decode('cp932')
-                self.config.read_string(content)
-            except (UnicodeDecodeError, OSError) as e:
-                raise OSError(f"Failed to load config: {e}") from e
-
-    def save_config(self) -> None:
-        try:
-            with open(self.config_file, 'w', encoding='utf-8') as configfile:
-                self.config.write(configfile)
-        except (IOError, OSError) as e:
-            raise OSError(f"Failed to load config: {e}") from e
-
-    def get_path(self, key: str) -> Path:
-        return Path(self.config.get('Paths', key))
-
-    def _ensure_section(self, section: str) -> None:
-        if section not in self.config:
-            self.config[section] = {}
+CONFIG_PATH = get_config_path()
 
 
 def load_config() -> configparser.ConfigParser:
-    return ConfigManager().config
-
-
-def get_config_value(
-    config: configparser.ConfigParser,
-    section: str,
-    key: str,
-    fallback: object = None,
-) -> object:
+    config = configparser.ConfigParser()
     try:
-        value = config.get(section, key)
-        if isinstance(fallback, bool):
-            return value.lower() in ('true', '1', 'yes')
-        if isinstance(fallback, int):
-            return int(value)
-        return value
-    except (configparser.NoSectionError, configparser.NoOptionError):
-        return fallback
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config.read_file(f)
+
+        if 'Analysis' not in config:
+            config['Analysis'] = {}
+
+        if 'ordered_names' not in config['Analysis']:
+            config['Analysis']['ordered_names'] = "植田,沖野,鴨林,小牧,渋井,白岡,大代,高林,高宮,中野,花﨑,松島,山本"
+            save_config(config)
+    except FileNotFoundError:
+        print(f"設定ファイルが見つかりません: {CONFIG_PATH}")
+        raise
+    except PermissionError:
+        print(f"設定ファイルを読み取る権限がありません: {CONFIG_PATH}")
+        raise
+    except configparser.Error as e:
+        print(f"設定ファイルの解析中にエラーが発生しました: {e}")
+        raise
+    return config
+
+
+def get_ordered_names(config):
+    ordered_names_str = config['Analysis'].get('ordered_names', "")
+    if ordered_names_str:
+        return [name.strip() for name in ordered_names_str.split(',')]
+    return []
+
+
+def save_config(config: configparser.ConfigParser):
+    try:
+        with open(CONFIG_PATH, 'w', encoding='utf-8') as configfile:
+            config.write(configfile)
+    except PermissionError:
+        print(f"設定ファイルを書き込む権限がありません: {CONFIG_PATH}")
+        raise
+    except IOError as e:
+        print(f"設定ファイルの保存中にエラーが発生しました: {e}")
+        raise

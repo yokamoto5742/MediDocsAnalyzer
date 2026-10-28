@@ -2,16 +2,14 @@ import os
 import pytest
 import shutil
 import configparser
-from pathlib import Path
-from datetime import datetime
 import tempfile
 
 import openpyxl
 import polars as pl
-from unittest.mock import patch, MagicMock, mock_open, ANY
+from unittest.mock import patch
 
-from service_medical_docs_analyzer import analyze_medical_documents, output_excel, MedicalDocsAnalyzer
-from config_manager import load_config
+from service_medical_docs_analyzer import analyze_medical_documents, MedicalDocsAnalyzer
+from utils.config_manager import load_config
 
 
 def restore_config(config, original_config):
