@@ -10,7 +10,7 @@ import polars as pl
 
 # テスト対象のモジュールをインポート
 from utils import config_manager
-from service_medical_docs_processor import process_medical_documents
+from service.service_medical_docs_processor import process_medical_documents
 
 
 # テスト用のヘルパー関数
@@ -313,7 +313,7 @@ def test_process_medical_documents_file_permissions(temp_dir, test_config, sampl
         raise PermissionError("テスト用のPermissionError")
 
     # モックを適用
-    monkeypatch.setattr("service_medical_docs_processor.write_dataframe_to_excel", mock_write_dataframe)
+    monkeypatch.setattr("service.service_medical_docs_processor.write_dataframe_to_excel", mock_write_dataframe)
 
     # 処理を実行
     result = process_medical_documents(source_path, target_path)

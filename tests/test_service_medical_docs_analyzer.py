@@ -8,7 +8,7 @@ import openpyxl
 import polars as pl
 from unittest.mock import patch
 
-from service_medical_docs_analyzer import analyze_medical_documents, MedicalDocsAnalyzer
+from service.service_medical_docs_analyzer import analyze_medical_documents, MedicalDocsAnalyzer
 from utils.config_manager import load_config
 
 
@@ -94,9 +94,9 @@ def temp_files():
         pass
 
 
-@patch('service_medical_docs_analyzer.load_config')
+@patch('service.service_medical_docs_analyzer.load_config')
 @patch('os.system')  # Excelを開かないようにパッチ
-@patch('service_medical_docs_analyzer.output_excel')  # output_excelをモック化
+@patch('service.service_medical_docs_analyzer.output_excel')  # output_excelをモック化
 def test_analyze_medical_documents(mock_output_excel, mock_os_system, mock_load_config, mock_config, temp_files):
     # モックの設定
     mock_load_config.return_value = mock_config
@@ -124,7 +124,7 @@ def test_analyze_medical_documents(mock_output_excel, mock_os_system, mock_load_
     mock_os_system.assert_not_called()
 
 
-@patch('service_medical_docs_analyzer.load_config')
+@patch('service.service_medical_docs_analyzer.load_config')
 @patch('os.system')  # Excelを開かないようにパッチ
 def test_analyze_medical_documents_no_data(mock_os_system, mock_load_config, mock_config, temp_files):
     # 空のデータベースファイルを作成
@@ -152,12 +152,12 @@ def test_analyze_medical_documents_no_data(mock_os_system, mock_load_config, moc
 
 
 @patch('os.system')  # Excelを開かないようにパッチ
-@patch('service_medical_docs_analyzer.os.path.exists')
+@patch('service.service_medical_docs_analyzer.os.path.exists')
 def test_output_excel(mock_path_exists, mock_os_system, mock_config, temp_files):
     pass # 動作確認は手動で行う
 
 
-@patch('service_medical_docs_analyzer.analyze_medical_documents')
+@patch('service.service_medical_docs_analyzer.analyze_medical_documents')
 @patch('os.system')  # Excelを開かないようにパッチ
 def test_medical_docs_analyzer_run_analysis(mock_os_system, mock_analyze, mock_config):
     # 元のconfigをバックアップ
@@ -165,7 +165,7 @@ def test_medical_docs_analyzer_run_analysis(mock_os_system, mock_analyze, mock_c
 
     try:
         # テスト用configを設定
-        with patch('service_medical_docs_analyzer.load_config', return_value=mock_config):
+        with patch('service.service_medical_docs_analyzer.load_config', return_value=mock_config):
             analyzer = MedicalDocsAnalyzer()
             success, message = analyzer.run_analysis('2025-01-01', '2025-01-31')
 
@@ -189,7 +189,7 @@ def test_medical_docs_analyzer_run_analysis(mock_os_system, mock_analyze, mock_c
     mock_os_system.assert_not_called()
 
 
-@patch('service_medical_docs_analyzer.analyze_medical_documents')
+@patch('service.service_medical_docs_analyzer.analyze_medical_documents')
 @patch('os.system')  # Excelを開かないようにパッチ
 def test_medical_docs_analyzer_run_analysis_error(mock_os_system, mock_analyze, mock_config):
     # 例外を発生させるようにモックを設定
@@ -200,7 +200,7 @@ def test_medical_docs_analyzer_run_analysis_error(mock_os_system, mock_analyze, 
 
     try:
         # テスト用configを設定
-        with patch('service_medical_docs_analyzer.load_config', return_value=mock_config):
+        with patch('service.service_medical_docs_analyzer.load_config', return_value=mock_config):
             analyzer = MedicalDocsAnalyzer()
             success, message = analyzer.run_analysis('2025-01-01', '2025-01-31')
 
@@ -216,7 +216,7 @@ def test_medical_docs_analyzer_run_analysis_error(mock_os_system, mock_analyze, 
     mock_os_system.assert_not_called()
 
 
-@patch('service_medical_docs_analyzer.analyze_medical_documents')
+@patch('service.service_medical_docs_analyzer.analyze_medical_documents')
 @patch('os.system')  # Excelを開かないようにパッチ
 def test_medical_docs_analyzer_run_analysis_date_error(mock_os_system, mock_analyze, mock_config):
     # 日付エラーを発生させるようにモックを設定
@@ -227,7 +227,7 @@ def test_medical_docs_analyzer_run_analysis_date_error(mock_os_system, mock_anal
 
     try:
         # テスト用configを設定
-        with patch('service_medical_docs_analyzer.load_config', return_value=mock_config):
+        with patch('service.service_medical_docs_analyzer.load_config', return_value=mock_config):
             analyzer = MedicalDocsAnalyzer()
             success, message = analyzer.run_analysis('不正な日付', '2025-01-31')
 

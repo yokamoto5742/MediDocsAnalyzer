@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock, mock_open
 import openpyxl
 import polars as pl
 
-from service_excel_handler import (
+from service.service_excel_handler import (
     backup_excel_file,
     get_last_row,
     apply_cell_formats,
@@ -92,7 +92,7 @@ class TestGetLastRow:
 
 
 class TestApplyCellFormats:
-    @patch('service_excel_handler.get_last_row')
+    @patch('service.service_excel_handler.get_last_row')
     def test_apply_cell_formats(self, mock_get_last_row):
         # モックの設定
         mock_get_last_row.return_value = 3

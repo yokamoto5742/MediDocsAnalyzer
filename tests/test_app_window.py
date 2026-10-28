@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from app_window import MedicalDocsAnalyzerGUI
+from app.app_window import MedicalDocsAnalyzerGUI
 from utils.config_manager import load_config
 
 
@@ -26,7 +26,7 @@ def original_config():
 @pytest.fixture
 def mock_tk():
     """tkinterのモックを作成するフィクスチャ"""
-    with patch('app_window.tk') as mock_tk:
+    with patch('app.app_window.tk') as mock_tk:
         # Tkオブジェクトのモック
         mock_root = MagicMock()
         mock_tk.Tk.return_value = mock_root
@@ -55,7 +55,7 @@ def mock_tk():
 @pytest.fixture
 def mock_date_entry():
     """DateEntryのモックを作成するフィクスチャ"""
-    with patch('app_window.DateEntry') as mock_date_entry:
+    with patch('app.app_window.DateEntry') as mock_date_entry:
         mock_date = MagicMock()
         mock_date.get_date.return_value = datetime.now().date()
         mock_date_entry.return_value = mock_date
@@ -66,15 +66,15 @@ def mock_date_entry():
 def gui(original_config):
     """GUIインスタンスを作成するフィクスチャ"""
     # すべての外部依存をモック化
-    with patch('app_window.tk'), \
-            patch('app_window.ttk'), \
-            patch('app_window.DateEntry'), \
-            patch('app_window.process_medical_documents'), \
-            patch('app_window.messagebox'), \
-            patch('app_window.MedicalDocsAnalyzer') as mock_analyzer:
+    with patch('app.app_window.tk'), \
+            patch('app.app_window.ttk'), \
+            patch('app.app_window.DateEntry'), \
+            patch('app.app_window.process_medical_documents'), \
+            patch('app.app_window.messagebox'), \
+            patch('app.app_window.MedicalDocsAnalyzer') as mock_analyzer:
         # tkとttkのモックを取得
-        mock_tk = pytest.importorskip('app_window').tk
-        mock_ttk = pytest.importorskip('app_window').ttk
+        mock_tk = pytest.importorskip('app.app_window').tk
+        mock_ttk = pytest.importorskip('app.app_window').ttk
 
         # ルートとフレームのモック
         mock_root = MagicMock()
@@ -95,7 +95,7 @@ def gui(original_config):
         # DateEntryのモック
         mock_date = MagicMock()
         mock_date.get_date.return_value = datetime.now().date()
-        pytest.importorskip('app_window').DateEntry.return_value = mock_date
+        pytest.importorskip('app.app_window').DateEntry.return_value = mock_date
 
         # GUIのインスタンスを作成
         gui = MedicalDocsAnalyzerGUI(mock_root)
@@ -125,7 +125,7 @@ class TestMedicalDocsAnalyzerGUI:
         assert hasattr(gui, 'end_date')
 
         # DateEntryが呼ばれたことを確認
-        assert pytest.importorskip('app_window').DateEntry.call_count >= 2
+        assert pytest.importorskip('app.app_window').DateEntry.call_count >= 2
 
     def test_setup_buttons(self, gui):
         """ボタンの設定が正しく行われるかテスト"""
@@ -133,8 +133,8 @@ class TestMedicalDocsAnalyzerGUI:
         buttons_called = gui._setup_buttons_called > 0
         assert buttons_called, "ボタンの設定メソッドが呼ばれていない"
 
-    @patch('app_window.process_medical_documents')
-    @patch('app_window.messagebox')
+    @patch('app.app_window.process_medical_documents')
+    @patch('app.app_window.messagebox')
     def test_load_data_success(self, mock_messagebox, mock_process, gui):
         """データ読込の成功パターンをテスト"""
         mock_process.return_value = True
@@ -149,8 +149,8 @@ class TestMedicalDocsAnalyzerGUI:
             # 成功メッセージが表示されたことを確認
             mock_messagebox.showinfo.assert_called_once_with("完了", "データ読込が完了しました。")
 
-    @patch('app_window.process_medical_documents')
-    @patch('app_window.messagebox')
+    @patch('app.app_window.process_medical_documents')
+    @patch('app.app_window.messagebox')
     def test_load_data_failure(self, mock_messagebox, mock_process, gui):
         """データ読込の失敗パターンをテスト"""
         mock_process.return_value = False
@@ -165,8 +165,8 @@ class TestMedicalDocsAnalyzerGUI:
             # エラーメッセージが表示されたことを確認
             mock_messagebox.showerror.assert_called_once_with("エラー", "データ読込中にエラーが発生しました。")
 
-    @patch('app_window.process_medical_documents')
-    @patch('app_window.messagebox')
+    @patch('app.app_window.process_medical_documents')
+    @patch('app.app_window.messagebox')
     def test_load_data_exception(self, mock_messagebox, mock_process, gui):
         """データ読込でExceptionが発生した場合のテスト"""
         mock_process.side_effect = Exception("テストエラー")
@@ -179,8 +179,8 @@ class TestMedicalDocsAnalyzerGUI:
             mock_messagebox.showerror.assert_called_once()
             assert "予期せぬエラー" in mock_messagebox.showerror.call_args[0][1]
 
-    @patch('app_window.save_config')
-    @patch('app_window.messagebox')
+    @patch('app.app_window.save_config')
+    @patch('app.app_window.messagebox')
     def test_save_date_to_config_success(self, mock_messagebox, mock_save_config, gui):
         """設定の保存が成功する場合のテスト"""
         # 開始日と終了日のget_dateが同じ日付を返すようにモック化済み
@@ -192,8 +192,8 @@ class TestMedicalDocsAnalyzerGUI:
         assert 'start_date' in gui.config['Analysis']
         assert 'end_date' in gui.config['Analysis']
 
-    @patch('app_window.save_config')
-    @patch('app_window.messagebox')
+    @patch('app.app_window.save_config')
+    @patch('app.app_window.messagebox')
     def test_save_date_to_config_invalid_date(self, mock_messagebox, mock_save_config, gui):
         """終了日より後の開始日を設定した場合のテスト"""
         # 開始日が終了日より後になるようにモック
@@ -209,7 +209,7 @@ class TestMedicalDocsAnalyzerGUI:
             assert "開始日が終了日より後の日付" in mock_messagebox.showerror.call_args[0][1]
             mock_save_config.assert_not_called()
 
-    @patch('app_window.messagebox')
+    @patch('app.app_window.messagebox')
     def test_start_analysis_success(self, mock_messagebox, gui):
         """分析開始が成功する場合のテスト"""
         # save_date_to_configをモックに置き換え
@@ -225,7 +225,7 @@ class TestMedicalDocsAnalyzerGUI:
             # エラーメッセージが表示されなかったことを確認
             mock_messagebox.showerror.assert_not_called()
 
-    @patch('app_window.messagebox')
+    @patch('app.app_window.messagebox')
     def test_start_analysis_date_error(self, mock_messagebox, gui):
         """日付設定でエラーが発生した場合のテスト"""
         # save_date_to_configをモックに置き換え
@@ -238,7 +238,7 @@ class TestMedicalDocsAnalyzerGUI:
             # run_analysisが呼ばれなかったことを確認
             gui.analyzer.run_analysis.assert_not_called()
 
-    @patch('app_window.messagebox')
+    @patch('app.app_window.messagebox')
     def test_start_analysis_exception(self, mock_messagebox, gui):
         """分析実行中に例外が発生した場合のテスト"""
         # save_date_to_configをモックに置き換え
@@ -255,7 +255,7 @@ class TestMedicalDocsAnalyzerGUI:
             mock_messagebox.showerror.assert_called_once()
             assert "予期せぬエラー" in mock_messagebox.showerror.call_args[0][1]
 
-    @patch('app_window.subprocess.Popen')
+    @patch('app.app_window.subprocess.Popen')
     def test_open_config_success(self, mock_popen, gui):
         """設定ファイルを開くテスト"""
         gui.open_config()
@@ -266,8 +266,8 @@ class TestMedicalDocsAnalyzerGUI:
         assert args[0] == 'notepad.exe'
         assert 'config_path' in gui.config['PATHS']
 
-    @patch('app_window.subprocess.Popen')
-    @patch('app_window.messagebox')
+    @patch('app.app_window.subprocess.Popen')
+    @patch('app.app_window.messagebox')
     def test_open_config_error(self, mock_messagebox, mock_popen, gui):
         """設定ファイルを開くエラーのテスト"""
         mock_popen.side_effect = Exception("テストエラー")
