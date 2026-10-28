@@ -3,7 +3,13 @@ name = "medidocsanalyzer"
 version = "1.0.0"
 requires-python = ">=3.13"
 
-dependencies = []
+dependencies = [
+    "babel>=2.17.0",
+    "openpyxl>=3.1.5",
+    "polars>=1.23.0",
+    "pyarrow>=19.0.1",
+    "tkcalendar>=1.6.1",
+]
 
 [dependency-groups]
 dev = [
