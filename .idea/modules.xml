@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/medidocsanalyzer.iml" filepath="$PROJECT_DIR$/.idea/medidocsanalyzer.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/taskanalyzer.iml" filepath="$PROJECT_DIR$/.idea/taskanalyzer.iml" />
     </modules>
   </component>
 </project>

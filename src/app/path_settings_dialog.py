@@ -1,0 +1,58 @@
+import tkinter as tk
+from collections.abc import Callable
+from tkinter import filedialog, ttk
+
+from app import constants
+from utils.config_manager import load_config, save_config
+
+EXCEL_FILE_TYPES = [(constants.EXCEL_FILE_TYPE_LABEL, '*.xlsx')]
+
+
+class PathSettingsDialog:
+    def __init__(self, parent: tk.Tk) -> None:
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(constants.PATH_SETTINGS_TITLE)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+
+        paths_config = load_config()['PATHS']
+        self.path_vars = {
+            'input_file_path': tk.StringVar(value=paths_config.get('input_file_path', '')),
+            'template_path': tk.StringVar(value=paths_config.get('template_path', '')),
+            'output_dir': tk.StringVar(value=paths_config.get('output_dir', '')),
+        }
+
+        frame = ttk.Frame(self.dialog, padding="10")
+        frame.grid(row=0, column=0)
+        self._add_path_row(frame, 0, constants.INPUT_FILE_LABEL, 'input_file_path', self._choose_file)
+        self._add_path_row(frame, 1, constants.TEMPLATE_FILE_LABEL, 'template_path', self._choose_file)
+        self._add_path_row(frame, 2, constants.OUTPUT_DIR_LABEL, 'output_dir', self._choose_directory)
+
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=3, column=0, columnspan=3, pady=10)
+        ttk.Button(button_frame, text=constants.SAVE_BUTTON_LABEL, command=self.save).grid(row=0, column=0, padx=5)
+        ttk.Button(button_frame, text=constants.CANCEL_BUTTON_LABEL, command=self.dialog.destroy).grid(
+            row=0, column=1, padx=5)
+
+    def _add_path_row(self, parent: ttk.Frame, row: int, label: str, key: str, choose_command: Callable[[str], None]) -> None:
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Entry(parent, width=50, textvariable=self.path_vars[key]).grid(row=row, column=1, padx=5, pady=5)
+        ttk.Button(parent, text=constants.BROWSE_BUTTON_LABEL,
+                   command=lambda: choose_command(key)).grid(row=row, column=2, padx=5, pady=5)
+
+    def _choose_file(self, key: str) -> None:
+        selected = filedialog.askopenfilename(parent=self.dialog, filetypes=EXCEL_FILE_TYPES)
+        if selected:
+            self.path_vars[key].set(selected.replace('/', '\\'))
+
+    def _choose_directory(self, key: str) -> None:
+        selected = filedialog.askdirectory(parent=self.dialog)
+        if selected:
+            self.path_vars[key].set(selected.replace('/', '\\'))
+
+    def save(self) -> None:
+        # メモ帳での編集を消さないよう、保存直前に読み直す
+        config = load_config()
+        config['PATHS'].update({key: var.get().strip() for key, var in self.path_vars.items()})
+        save_config(config)
+        self.dialog.destroy()
