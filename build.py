@@ -6,7 +6,7 @@ def build_executable():
         "pyinstaller",
         "--name=app_name",
         "--windowed",
-        "--add-data", "utils/config.ini:.",
+        "--add-data", "utils/config.ini;.",
         "main.py"
     ])
 
