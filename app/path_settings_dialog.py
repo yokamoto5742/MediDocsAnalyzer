@@ -5,7 +5,7 @@ from tkinter import filedialog, ttk
 from app import constants
 from utils.config_manager import load_config, save_config
 
-EXCEL_FILE_TYPES = [(constants.EXCEL_FILE_TYPE_LABEL, '*.xlsx')]
+EXCEL_FILE_TYPES = [(constants.EXCEL_FILE_TYPE_LABEL, '*.xlsx *.xlsm')]
 
 
 class PathSettingsDialog:
@@ -16,25 +16,28 @@ class PathSettingsDialog:
         self.dialog.grab_set()
 
         paths_config = load_config()['PATHS']
-        self.path_vars = {
-            'input_file_path': tk.StringVar(value=paths_config.get('input_file_path', '')),
-            'template_path': tk.StringVar(value=paths_config.get('template_path', '')),
-            'output_dir': tk.StringVar(value=paths_config.get('output_dir', '')),
-        }
+        path_rows: list[tuple[str, str, Callable[[str], None]]] = [
+            ('source_file_path', constants.SOURCE_FILE_LABEL, self._choose_file),
+            ('database_path', constants.DATABASE_FILE_LABEL, self._choose_file),
+            ('backup_dir', constants.BACKUP_DIR_LABEL, self._choose_directory),
+            ('template_path', constants.TEMPLATE_FILE_LABEL, self._choose_file),
+            ('output_dir', constants.OUTPUT_DIR_LABEL, self._choose_directory),
+        ]
+        self.path_vars = {key: tk.StringVar(value=paths_config.get(key, '')) for key, _, _ in path_rows}
 
         frame = ttk.Frame(self.dialog, padding="10")
         frame.grid(row=0, column=0)
-        self._add_path_row(frame, 0, constants.INPUT_FILE_LABEL, 'input_file_path', self._choose_file)
-        self._add_path_row(frame, 1, constants.TEMPLATE_FILE_LABEL, 'template_path', self._choose_file)
-        self._add_path_row(frame, 2, constants.OUTPUT_DIR_LABEL, 'output_dir', self._choose_directory)
+        for row, (key, label, choose_command) in enumerate(path_rows):
+            self._add_path_row(frame, row, label, key, choose_command)
 
         button_frame = ttk.Frame(frame)
-        button_frame.grid(row=3, column=0, columnspan=3, pady=10)
+        button_frame.grid(row=len(path_rows), column=0, columnspan=3, pady=10)
         ttk.Button(button_frame, text=constants.SAVE_BUTTON_LABEL, command=self.save).grid(row=0, column=0, padx=5)
         ttk.Button(button_frame, text=constants.CANCEL_BUTTON_LABEL, command=self.dialog.destroy).grid(
             row=0, column=1, padx=5)
 
-    def _add_path_row(self, parent: ttk.Frame, row: int, label: str, key: str, choose_command: Callable[[str], None]) -> None:
+    def _add_path_row(self, parent: ttk.Frame, row: int, label: str, key: str,
+                      choose_command: Callable[[str], None]) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
         ttk.Entry(parent, width=50, textvariable=self.path_vars[key]).grid(row=row, column=1, padx=5, pady=5)
         ttk.Button(parent, text=constants.BROWSE_BUTTON_LABEL,

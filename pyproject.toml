@@ -1,6 +1,6 @@
 [project]
 name = "medidocsanalyzer"
-version = "1.0.0"
+version = "1.1.0"
 requires-python = ">=3.13"
 
 dependencies = [
@@ -24,6 +24,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+markers = [
+    "integration: 実際の Tkinter ウィンドウを使う統合テスト",
+]
 
 [tool.pyright]
 typeCheckingMode = "standard"
