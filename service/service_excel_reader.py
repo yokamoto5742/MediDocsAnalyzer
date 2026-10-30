@@ -41,6 +41,7 @@ class SourceData:
     documents: list[Document] = field(default_factory=list)
     errors: list[RowError] = field(default_factory=list)
     first_received_date: date | None = None
+    last_received_date: date | None = None
 
 
 def to_date(value: object) -> date | None:
@@ -86,7 +87,7 @@ def read_documents(file_path: str, known_staff: set[str] | None = None) -> Sourc
     """1 行目を見出しとして読み、医師依頼日と担当者名がある行を文書として返す。
 
     空欄の行は下書きとして飛ばし、日付が読めない行などはエラーとして返す。
-    first_received_date には、読めた預り日のうち最も古い日付(下書きを含む)を入れる。
+    first_received_date / last_received_date には、読めた預り日(下書きを含む)の最も古い日・新しい日を入れる。
     """
     wb = load_workbook(file_path, read_only=True, data_only=True)
     sheet = wb.active
@@ -112,13 +113,14 @@ def read_documents(file_path: str, known_staff: set[str] | None = None) -> Sourc
 
 def _add_row(source: SourceData, cells: dict[str, object], row_number: int, file_name: str,
              known_staff: set[str] | None) -> None:
-    # 預り日が読める行は、エラーでも取り込み範囲の起点に含める
+    # 預り日が読める行は、エラーでも取り込み範囲に含める
     try:
         received = to_date(cells[RECEIVED_DATE_COLUMN])
     except ValueError:
         received = None
-    if received is not None and (source.first_received_date is None or received < source.first_received_date):
-        source.first_received_date = received
+    if received is not None:
+        source.first_received_date = min(received, source.first_received_date or received)
+        source.last_received_date = max(received, source.last_received_date or received)
 
     reason = row_error_reason(cells, known_staff)
     if reason is not None:

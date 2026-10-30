@@ -52,7 +52,7 @@ def test_read_documents_skips_drafts_but_uses_their_received_date(tmp_path: Path
 
     assert [document.staff_name for document in source.documents] == ['植田']
     assert source.errors == []
-    assert source.first_received_date == date(2025, 4, 1)
+    assert (source.first_received_date, source.last_received_date) == (date(2025, 4, 1), date(2025, 4, 5))
 
 
 def test_read_documents_reports_error_rows(tmp_path: Path, make_workbook: MakeWorkbook) -> None:

@@ -7,15 +7,16 @@ from pathlib import Path
 
 from service import service_master
 from service.service_backup import backup_database_daily
-from service.service_data_analyzer import count_documents
-from service.service_database import (count_all_documents, count_documents_from, open_database,
-                                      replace_documents_from)
+from service.service_data_analyzer import DocumentCounts, StaffCounts, count_documents, count_staff_documents
+from service.service_database import (count_all_documents, count_documents_between, open_database,
+                                      replace_documents_between)
 from service.service_excel_reader import NoDataError, RowError, SourceData, read_documents
-from service.service_excel_writer import TOTAL_LABEL, save_results
+from service.service_excel_writer import TOTAL_LABEL, save_results, save_staff_results
 from service.service_master import Department, Staff
 from utils.config_manager import load_config
 
 DEFAULT_KEEP_GENERATIONS = 30
+TOP_DOCUMENT_COUNT = 10
 
 
 def split_list(text: str) -> list[str]:
@@ -35,9 +36,21 @@ class ImportPlan:
         return self.source.first_received_date
 
     @property
+    def end_date(self) -> date:
+        assert self.source.last_received_date is not None
+        return self.source.last_received_date
+
+    @property
     def errors(self) -> list[RowError]:
         legacy_errors = self.legacy.errors if self.legacy else []
         return legacy_errors + self.source.errors
+
+
+@dataclass
+class OverallSummary:
+    counts: DocumentCounts
+    staff_members: list[str]
+    departments: list[str]  # 先頭は合計列
 
 
 class MedicalDocsAnalyzer:
@@ -54,8 +67,9 @@ class MedicalDocsAnalyzer:
             yield connection
 
     def prepare_import(self) -> ImportPlan:
-        """元データを読み、預り日が最も古い日以降の DB の文書を入れ替える計画を返す。
+        """元データを読み、元データの預り日の範囲(最も古い日〜新しい日)にある DB の文書を入れ替える計画を返す。
 
+        元データが古いコピーでも、それより新しい DB の文書は消さない。
         DB が空で旧 DB(xlsx)があれば、先に旧 DB の文書を取り込む計画にする。
         """
         paths_config = load_config()['PATHS']
@@ -64,26 +78,27 @@ class MedicalDocsAnalyzer:
             is_empty = count_all_documents(connection) == 0
 
         source = read_documents(paths_config['source_file_path'], known_staff)
-        if source.first_received_date is None:
+        if source.first_received_date is None or source.last_received_date is None:
             raise NoDataError
-        start_date = source.first_received_date
+        start_date, end_date = source.first_received_date, source.last_received_date
 
         with self._open_database() as connection:
-            deleted_count = count_documents_from(connection, start_date)
+            deleted_count = count_documents_between(connection, start_date, end_date)
 
         legacy = None
         legacy_path = paths_config.get('legacy_database_path', '')
         if is_empty and legacy_path and Path(legacy_path).exists():
             legacy = read_documents(legacy_path, known_staff)
-            deleted_count = sum(document.received_date >= start_date for document in legacy.documents)
+            deleted_count = sum(start_date <= document.received_date <= end_date for document in legacy.documents)
         return ImportPlan(source, legacy, deleted_count)
 
     def apply_import(self, plan: ImportPlan) -> int:
         """計画どおりに DB を書き換え、DB の件数を返す"""
         with self._open_database() as connection:
-            if plan.legacy is not None and plan.legacy.first_received_date is not None:
-                replace_documents_from(connection, plan.legacy.first_received_date, plan.legacy.documents)
-            replace_documents_from(connection, plan.start_date, plan.source.documents)
+            if plan.legacy is not None and plan.legacy.first_received_date and plan.legacy.last_received_date:
+                replace_documents_between(connection, plan.legacy.first_received_date,
+                                          plan.legacy.last_received_date, plan.legacy.documents)
+            replace_documents_between(connection, plan.start_date, plan.end_date, plan.source.documents)
             return count_all_documents(connection)
 
     def backup_database(self, today: date) -> Path | None:
@@ -115,9 +130,8 @@ class MedicalDocsAnalyzer:
         with self._open_database() as connection:
             service_master.delete_department(connection, name)
 
-    def run_analysis(self, start_date: date, end_date: date) -> str:
-        """期間内の文書を集計して Excel に保存し、保存先のパスを返す"""
-        paths_config = load_config()['PATHS']
+    def overall_summary(self, start_date: date, end_date: date) -> OverallSummary:
+        """期間内の文書を担当者×診療科で集計する。期間内に文書がなければ NoDataError"""
         with self._open_database() as connection:
             counts = count_documents(connection, start_date, end_date)
             staff_list = service_master.list_staff(connection)
@@ -126,10 +140,26 @@ class MedicalDocsAnalyzer:
         # 退職した担当者も、期間内に件数があれば並べる
         counted_staff = {staff for staff, _ in counts.by_staff_department}
         staff_members = [staff.name for staff in staff_list if staff.active or staff.name in counted_staff]
+        return OverallSummary(counts, staff_members, [TOTAL_LABEL, *(department.name for department in departments)])
+
+    def staff_summary(self, staff_name: str, start_date: date, end_date: date) -> StaffCounts:
+        with self._open_database() as connection:
+            return count_staff_documents(connection, staff_name, start_date, end_date, TOP_DOCUMENT_COUNT)
+
+    def export_staff(self, staff_name: str, start_date: date, end_date: date) -> str:
+        """1 人分の集計を Excel に保存し、保存先のパスを返す"""
+        output_dir = load_config()['PATHS']['output_dir']
+        return save_staff_results(self.staff_summary(staff_name, start_date, end_date), start_date, end_date,
+                                  output_dir)
+
+    def run_analysis(self, start_date: date, end_date: date) -> str:
+        """期間内の文書を集計して Excel に保存し、保存先のパスを返す"""
+        paths_config = load_config()['PATHS']
+        summary = self.overall_summary(start_date, end_date)
         return save_results(
-            counts,
-            staff_members,
-            [TOTAL_LABEL, *(department.name for department in departments)],
+            summary.counts,
+            summary.staff_members,
+            summary.departments,
             paths_config['template_path'],
             paths_config['output_dir'],
         )

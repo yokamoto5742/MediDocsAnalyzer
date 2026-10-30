@@ -9,6 +9,7 @@ from app import __version__, constants
 from app.import_errors_dialog import ImportErrorsDialog
 from app.master_dialog import MasterDialog
 from app.path_settings_dialog import PathSettingsDialog
+from app.result_view import ResultView
 from service.service_excel_reader import NoDataError
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
 from utils.config_manager import CONFIG_PATH, load_config, save_config
@@ -28,15 +29,22 @@ class MedicalDocsAnalyzerGUI:
         window_height = self.config.getint('Appearance', 'window_height')
         self.root.geometry(f"{window_width}x{window_height}")
 
+        # 画面に出している集計の期間。未集計なら None
+        self.period: tuple[date, date] | None = None
         self._setup_gui()
         self.backup_database()
 
     def _setup_gui(self) -> None:
+        self.root.columnconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         self._setup_date_frame(main_frame)
         self._setup_buttons(main_frame)
+
+        self.result_view = ResultView(self.root, self.export_overall, self.export_staff, self.show_staff_summary)
+        self.result_view.notebook.grid(row=0, column=1, sticky=tk.NSEW, padx=(0, 10), pady=10)
 
     def _setup_date_frame(self, parent: ttk.Frame) -> None:
         date_frame = ttk.LabelFrame(parent, text="分析期間", padding="5")
@@ -139,7 +147,7 @@ class MedicalDocsAnalyzerGUI:
     @staticmethod
     def _import_confirm_message(plan: ImportPlan) -> str:
         message = constants.IMPORT_CONFIRM_MESSAGE.format(
-            start_date=plan.start_date, deleted=plan.deleted_count,
+            start_date=plan.start_date, end_date=plan.end_date, deleted=plan.deleted_count,
             inserted=len(plan.source.documents), errors=len(plan.errors))
         if plan.legacy is not None:
             message = constants.LEGACY_IMPORT_MESSAGE.format(count=len(plan.legacy.documents)) + message
@@ -160,12 +168,47 @@ class MedicalDocsAnalyzerGUI:
 
         try:
             self._save_analysis_settings(start_date, end_date)
-            self.analyzer.run_analysis(start_date, end_date)
+            summary = self.analyzer.overall_summary(start_date, end_date)
         except NoDataError:
             messagebox.showerror(constants.ERROR_TITLE, constants.NO_DATA_MESSAGE)
+            return
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE,
                                  constants.ANALYSIS_ERROR_MESSAGE.format(error=e))
+            return
+
+        self.period = (start_date, end_date)
+        self.result_view.show_overall(summary)
+        self.result_view.set_staff_names(summary.staff_members)
+        self.show_staff_summary()
+
+    def show_staff_summary(self) -> None:
+        staff_name = self.result_view.staff_var.get()
+        if self.period is None or not staff_name:
+            return
+        try:
+            self.result_view.show_staff(self.analyzer.staff_summary(staff_name, *self.period))
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.ANALYSIS_ERROR_MESSAGE.format(error=e))
+
+    def export_overall(self) -> None:
+        if self.period is None:
+            messagebox.showerror(constants.ERROR_TITLE, constants.NOT_ANALYZED_ERROR_MESSAGE)
+            return
+        try:
+            self.analyzer.run_analysis(*self.period)
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
+
+    def export_staff(self) -> None:
+        staff_name = self.result_view.staff_var.get()
+        if self.period is None or not staff_name:
+            messagebox.showerror(constants.ERROR_TITLE, constants.NOT_ANALYZED_ERROR_MESSAGE)
+            return
+        try:
+            self.analyzer.export_staff(staff_name, *self.period)
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
     def _save_analysis_settings(self, start_date: date, end_date: date) -> None:
         # メモ帳での編集を消さないよう、保存直前に読み直す

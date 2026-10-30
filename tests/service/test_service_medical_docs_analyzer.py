@@ -55,6 +55,25 @@ def test_import_migrates_legacy_database_then_replaces_source_range(config_path:
     assert database_rows(config_path) == [('2025-03-31', '沖野'), ('2025-04-03', '花﨑')]
 
 
+def test_import_keeps_documents_newer_than_source(config_path: Path, make_workbook: MakeWorkbook) -> None:
+    tmp_path = config_path.parent
+    make_workbook(tmp_path / 'legacy.xlsx', [
+        ['2025/04/01', 1, '既存', '証明書', '内科', '佐藤', None, '2025/04/02', '沖野'],
+        ['2025/06/30', 2, '新しい', '証明書', '内科', '佐藤', None, '2025/07/01', '沖野'],
+    ])
+    make_workbook(tmp_path / 'source.xlsx', [
+        ['2025/04/01', 1, '既存', '証明書', '内科', '佐藤', None, '2025/04/02', '植田'],
+        ['2025/04/02', 3, '下書き', '証明書', '内科', '佐藤', None, None, None],
+    ])
+    analyzer = MedicalDocsAnalyzer()
+
+    plan = analyzer.prepare_import()
+    analyzer.apply_import(plan)
+
+    assert (plan.start_date, plan.end_date, plan.deleted_count) == (date(2025, 4, 1), date(2025, 4, 2), 1)
+    assert database_rows(config_path) == [('2025-04-01', '植田'), ('2025-06-30', '沖野')]
+
+
 def test_import_skips_legacy_database_when_database_has_documents(config_path: Path,
                                                                   make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
@@ -153,6 +172,20 @@ def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkboo
         ['花﨑', 0, 0, 0, 0],
         ['合計', 1, 1, 0, 0],
     ]
+
+
+def test_export_staff(config_path: Path, make_workbook: MakeWorkbook, startfile: MagicMock) -> None:
+    tmp_path = config_path.parent
+    make_workbook(tmp_path / 'source.xlsx', [
+        ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
+    ])
+    analyzer = MedicalDocsAnalyzer()
+    analyzer.apply_import(analyzer.prepare_import())
+
+    output_path = analyzer.export_staff('花﨑', date(2025, 4, 1), date(2025, 4, 30))
+
+    assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数_花﨑_20250401-20250430.xlsx'
+    assert load_workbook(output_path)['個人']['B2'].value == 1
 
 
 def test_run_analysis_raises_when_no_data_in_period(config_path: Path) -> None:

@@ -9,8 +9,9 @@ import pytest
 
 from app import constants
 from app.app_window import MedicalDocsAnalyzerGUI
+from service.service_data_analyzer import DocumentCounts, StaffCounts
 from service.service_excel_reader import Document, NoDataError, RowError, SourceData
-from service.service_medical_docs_analyzer import ImportPlan
+from service.service_medical_docs_analyzer import ImportPlan, OverallSummary
 from utils.config_manager import load_config
 
 
@@ -80,7 +81,7 @@ def test_apply_period_ignores_invalid_year(gui: MedicalDocsAnalyzerGUI) -> None:
 
 def make_plan(errors: list[RowError], legacy: SourceData | None = None) -> ImportPlan:
     source = SourceData(documents=[Document(date(2025, 4, 1), date(2025, 4, 2), '診断書', '内科', '佐藤', '植田')],
-                        errors=errors, first_received_date=date(2025, 4, 1))
+                        errors=errors, first_received_date=date(2025, 4, 1), last_received_date=date(2025, 4, 30))
     return ImportPlan(source, legacy, deleted_count=3)
 
 
@@ -107,7 +108,7 @@ def test_load_data_shows_completion(gui: MedicalDocsAnalyzerGUI, analyzer: Magic
         gui.load_data()
 
     assert messagebox.askyesno.call_args.args[1] == constants.IMPORT_CONFIRM_MESSAGE.format(
-        start_date=date(2025, 4, 1), deleted=3, inserted=1, errors=0)
+        start_date=date(2025, 4, 1), end_date=date(2025, 4, 30), deleted=3, inserted=1, errors=0)
     messagebox.showinfo.assert_called_once_with(
         constants.COMPLETE_TITLE, constants.LOAD_COMPLETE_MESSAGE.format(count=12))
     dialog.assert_not_called()
@@ -149,14 +150,29 @@ def test_load_data_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
     messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
 
 
-def test_start_analysis_runs_and_saves_settings(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                                messagebox: MagicMock) -> None:
+def make_summary() -> OverallSummary:
+    counts = DocumentCounts({('植田', '内科'): 2, ('花﨑', '外科'): 1}, {'内科': 2, '外科': 1}, 3,
+                            date(2025, 10, 1), date(2025, 12, 31))
+    return OverallSummary(counts, ['植田', '花﨑'], ['合計', '内科', '外科'])
+
+
+def make_staff_counts(name: str) -> StaffCounts:
+    return StaffCounts(name, 2, 1.5, [('内科', 2)], [('診断書', 2)], [('2025/10', 2), ('2025/11', 0)])
+
+
+def test_start_analysis_shows_results_and_saves_settings(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                                         messagebox: MagicMock) -> None:
+    analyzer.overall_summary.return_value = make_summary()
+    analyzer.staff_summary.return_value = make_staff_counts('植田')
     set_dates(gui, '2025/10/01', '2025/12/31')
     gui.year_start_month_var.set(1)
 
     gui.start_analysis()
 
-    analyzer.run_analysis.assert_called_once_with(date(2025, 10, 1), date(2025, 12, 31))
+    analyzer.overall_summary.assert_called_once_with(date(2025, 10, 1), date(2025, 12, 31))
+    analyzer.staff_summary.assert_called_once_with('植田', date(2025, 10, 1), date(2025, 12, 31))
+    assert gui.period == (date(2025, 10, 1), date(2025, 12, 31))
+    assert len(gui.result_view.overall_tree.get_children()) == 3
     analysis_config = load_config()['Analysis']
     assert (analysis_config['start_date'], analysis_config['end_date']) == ('2025-10-01', '2025-12-31')
     assert analysis_config['year_start_month'] == '1'
@@ -174,7 +190,7 @@ def test_start_analysis_rejects_invalid_dates(gui: MedicalDocsAnalyzerGUI, analy
     gui.start_analysis()
 
     messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
-    analyzer.run_analysis.assert_not_called()
+    analyzer.overall_summary.assert_not_called()
 
 
 @pytest.mark.parametrize(('error', 'expected_message'), [
@@ -183,11 +199,43 @@ def test_start_analysis_rejects_invalid_dates(gui: MedicalDocsAnalyzerGUI, analy
 ])
 def test_start_analysis_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock,
                                     error: Exception, expected_message: str) -> None:
-    analyzer.run_analysis.side_effect = error
+    analyzer.overall_summary.side_effect = error
 
     gui.start_analysis()
 
     messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
+    assert gui.period is None
+
+
+def test_export_requires_analysis(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:
+    gui.export_overall()
+    gui.export_staff()
+
+    assert messagebox.showerror.call_count == 2
+    analyzer.run_analysis.assert_not_called()
+    analyzer.export_staff.assert_not_called()
+
+
+def test_export_uses_shown_period_and_staff(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                            messagebox: MagicMock) -> None:
+    gui.period = (date(2025, 4, 1), date(2025, 4, 30))
+    gui.result_view.staff_var.set('花﨑')
+
+    gui.export_overall()
+    gui.export_staff()
+
+    analyzer.run_analysis.assert_called_once_with(date(2025, 4, 1), date(2025, 4, 30))
+    analyzer.export_staff.assert_called_once_with('花﨑', date(2025, 4, 1), date(2025, 4, 30))
+
+
+def test_export_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:
+    gui.period = (date(2025, 4, 1), date(2025, 4, 30))
+    analyzer.run_analysis.side_effect = PermissionError('locked')
+
+    gui.export_overall()
+
+    messagebox.showerror.assert_called_once_with(
+        constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error='locked'))
 
 
 def test_open_config_opens_notepad(gui: MedicalDocsAnalyzerGUI) -> None:

@@ -61,14 +61,16 @@ def count_all_documents(connection: sqlite3.Connection) -> int:
     return connection.execute('SELECT COUNT(*) FROM documents').fetchone()[0]
 
 
-def count_documents_from(connection: sqlite3.Connection, start_date: date) -> int:
-    return connection.execute('SELECT COUNT(*) FROM documents WHERE received_date >= ?',
-                              (start_date.isoformat(),)).fetchone()[0]
+def count_documents_between(connection: sqlite3.Connection, start_date: date, end_date: date) -> int:
+    return connection.execute('SELECT COUNT(*) FROM documents WHERE received_date BETWEEN ? AND ?',
+                              (start_date.isoformat(), end_date.isoformat())).fetchone()[0]
 
 
-def replace_documents_from(connection: sqlite3.Connection, start_date: date, documents: list[Document]) -> None:
-    """預り日が start_date 以降の文書を消して、documents を入れ直す"""
-    connection.execute('DELETE FROM documents WHERE received_date >= ?', (start_date.isoformat(),))
+def replace_documents_between(connection: sqlite3.Connection, start_date: date, end_date: date,
+                              documents: list[Document]) -> None:
+    """預り日が start_date〜end_date の文書を消して、documents を入れ直す"""
+    connection.execute('DELETE FROM documents WHERE received_date BETWEEN ? AND ?',
+                       (start_date.isoformat(), end_date.isoformat()))
     connection.executemany(
         'INSERT INTO documents (received_date, requested_date, document_name, department, doctor_name, staff_name)'
         ' VALUES (?, ?, ?, ?, ?, ?)',
