@@ -1,17 +1,18 @@
 import configparser
 import os
+import shutil
 import sys
 
 
 def get_config_path() -> str:
     if getattr(sys, 'frozen', False):
-        # PyInstallerでビルドされた実行ファイルの場合
-        base_path = getattr(sys, '_MEIPASS')
-    else:
-        # 通常のPythonスクリプトとして実行される場合
-        base_path = os.path.dirname(__file__)
+        # PyInstaller の展開先(_MEIPASS)は終了時に消えるため、exe と同じフォルダへ写して使う
+        config_path = os.path.join(os.path.dirname(sys.executable), 'config.ini')
+        if not os.path.exists(config_path):
+            shutil.copyfile(os.path.join(getattr(sys, '_MEIPASS'), 'config.ini'), config_path)
+        return config_path
 
-    return os.path.join(base_path, 'config.ini')
+    return os.path.join(os.path.dirname(__file__), 'config.ini')
 
 
 CONFIG_PATH = get_config_path()

@@ -16,7 +16,7 @@ Windows専用のtkinter GUIアプリ。医療文書の記録をExcelから読み
 ## 設定
 
 - 設定はすべて `utils/config.ini`(utf-8)。`[PATHS]` は `C:\Shinseikai\MediDocsAnalyzer\...` の絶対パス固定。
-- 凍結(PyInstaller)時は `sys._MEIPASS` 配下の ini を使うため、`save_config` の書き込みは永続化されない。
+- 凍結(PyInstaller)時は exe と同じフォルダの ini を使う。無ければ `sys._MEIPASS` に同梱した ini をコピーする。
 - テストは `tests/conftest.py` の `config_path` フィクスチャで一時 ini に差し替える。本物の `config.ini` を書き換えるテストを書かない。
 
 ## 注意点
