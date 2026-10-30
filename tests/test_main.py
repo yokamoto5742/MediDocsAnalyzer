@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,38 +7,31 @@ from main import main
 
 
 @pytest.fixture
-def mock_tk():
+def mock_tk() -> Iterator[MagicMock]:
     with patch('tkinter.Tk') as mock:
-        # Tkインスタンスのモック
-        mock_instance = MagicMock()
-        mock.return_value = mock_instance
         yield mock
 
 
 @pytest.fixture
-def mock_gui():
+def mock_gui() -> Iterator[MagicMock]:
     with patch('main.MedicalDocsAnalyzerGUI') as mock:
         yield mock
 
 
-def test_main_creates_root_window(mock_tk, mock_gui):
-    # mainメソッドを実行
-    main()
+def test_main_starts_gui_after_login(mock_tk: MagicMock, mock_gui: MagicMock) -> None:
+    user = MagicMock()
+    with patch('main.login_if_required', return_value=(True, user)):
+        main()
 
-    # Tkインスタンスが作成されたことを確認
-    mock_tk.assert_called_once()
-
-    # GUIが正しく初期化されたことを確認
-    mock_gui.assert_called_once()
-    assert mock_gui.call_args[0][0] == mock_tk.return_value
-
-    # mainloopが呼び出されたことを確認
+    mock_gui.assert_called_once_with(mock_tk.return_value, user)
+    mock_tk.return_value.deiconify.assert_called_once()
     mock_tk.return_value.mainloop.assert_called_once()
 
 
-@pytest.mark.integration
-def test_main_integration():
-    # 統合テスト: 実際のTkinterウィンドウを使用
-    with patch('tkinter.Tk.mainloop') as mock_mainloop:  # mainloopのみモック化
+def test_main_quits_when_login_cancelled(mock_tk: MagicMock, mock_gui: MagicMock) -> None:
+    with patch('main.login_if_required', return_value=(False, None)):
         main()
-        mock_mainloop.assert_called_once()
+
+    mock_gui.assert_not_called()
+    mock_tk.return_value.destroy.assert_called_once()
+    mock_tk.return_value.mainloop.assert_not_called()

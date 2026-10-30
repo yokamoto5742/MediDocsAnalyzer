@@ -7,10 +7,12 @@ from tkcalendar import DateEntry
 
 from app import __version__, constants
 from app.import_errors_dialog import ImportErrorsDialog
+from app.login_dialog import ChangePasswordDialog
 from app.master_dialog import MasterDialog
 from app.path_settings_dialog import PathSettingsDialog
 from app.result_view import ResultView
 from service.service_excel_reader import NoDataError
+from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
 from utils.config_manager import CONFIG_PATH, load_config, save_config
 from utils.date_period import PERIOD_NAMES, get_period_range, parse_date
@@ -19,9 +21,12 @@ DEFAULT_YEAR_START_MONTH = 4
 
 
 class MedicalDocsAnalyzerGUI:
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, user: Staff | None = None) -> None:
+        """user はログインした担当者。None ならログインなしで、すべての操作をできる"""
         self.root = root
-        self.root.title(f'医療文書集計 v{__version__}')
+        self.user = user
+        self.root.title(constants.LOGGED_IN_TITLE_FORMAT.format(version=__version__, name=user.name) if user
+                        else constants.WINDOW_TITLE_FORMAT.format(version=__version__))
         self.config = load_config()
         self.analyzer = MedicalDocsAnalyzer()
 
@@ -45,6 +50,15 @@ class MedicalDocsAnalyzerGUI:
 
         self.result_view = ResultView(self.root, self.export_overall, self.export_staff, self.show_staff_summary)
         self.result_view.notebook.grid(row=0, column=1, sticky=tk.NSEW, padx=(0, 10), pady=10)
+        self._apply_permissions()
+
+    def _apply_permissions(self) -> None:
+        """職員は取り込み・マスタ・設定を使えず、自分の個人集計だけを見られる"""
+        if self.user is None or self.user.role == ADMIN_ROLE:
+            return
+        for button in self.admin_buttons:
+            button.state(['disabled'])
+        self.result_view.restrict_to_staff(self.user.name)
 
     def _setup_date_frame(self, parent: ttk.Frame) -> None:
         date_frame = ttk.LabelFrame(parent, text="分析期間", padding="5")
@@ -110,18 +124,22 @@ class MedicalDocsAnalyzerGUI:
         self.end_date.set_date(end_date)
 
     def _setup_buttons(self, parent: ttk.Frame) -> None:
-        ttk.Button(parent, text="データ読込", command=self.load_data).grid(
-            row=2, column=0, columnspan=2, pady=10)
+        load_button = ttk.Button(parent, text="データ読込", command=self.load_data)
+        load_button.grid(row=2, column=0, columnspan=2, pady=10)
         ttk.Button(parent, text="集計開始", command=self.start_analysis).grid(
             row=3, column=0, columnspan=2, pady=10)
-        ttk.Button(parent, text="マスタ", command=self.open_master).grid(
-            row=4, column=0, columnspan=2, pady=5)
-        ttk.Button(parent, text="ファイルパス", command=self.open_path_settings).grid(
-            row=5, column=0, columnspan=2, pady=5)
-        ttk.Button(parent, text="設定", command=self.open_config).grid(
-            row=6, column=0, columnspan=2, pady=5)
+        master_button = ttk.Button(parent, text="マスタ", command=self.open_master)
+        master_button.grid(row=4, column=0, columnspan=2, pady=5)
+        path_button = ttk.Button(parent, text="ファイルパス", command=self.open_path_settings)
+        path_button.grid(row=5, column=0, columnspan=2, pady=5)
+        config_button = ttk.Button(parent, text="設定", command=self.open_config)
+        config_button.grid(row=6, column=0, columnspan=2, pady=5)
+        if self.user is not None:
+            ttk.Button(parent, text=constants.CHANGE_PASSWORD_BUTTON_LABEL, command=self.change_password).grid(
+                row=7, column=0, columnspan=2, pady=5)
         ttk.Button(parent, text="閉じる", command=self.root.quit).grid(
-            row=7, column=0, columnspan=2, pady=5)
+            row=8, column=0, columnspan=2, pady=5)
+        self.admin_buttons = [load_button, master_button, path_button, config_button]
 
     def backup_database(self) -> None:
         try:
@@ -219,6 +237,17 @@ class MedicalDocsAnalyzerGUI:
             'year_start_month': str(self.year_start_month_var.get())
         })
         save_config(self.config)
+
+    def change_password(self) -> None:
+        assert self.user is not None
+        try:
+            dialog = ChangePasswordDialog(self.root, self.analyzer, self.user)
+            self.root.wait_window(dialog.dialog)
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.ANALYSIS_ERROR_MESSAGE.format(error=e))
+            return
+        if dialog.changed:
+            messagebox.showinfo(constants.COMPLETE_TITLE, constants.PASSWORD_CHANGED_MESSAGE)
 
     def open_master(self) -> None:
         try:

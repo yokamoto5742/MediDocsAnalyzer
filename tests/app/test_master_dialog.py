@@ -75,6 +75,26 @@ def test_save_staff_shows_error(dialog: MasterDialog, messagebox: MagicMock,
     assert messagebox.showerror.call_args.args == (constants.ERROR_TITLE, expected_message)
 
 
+def test_issue_temporary_password(dialog: MasterDialog, analyzer: MedicalDocsAnalyzer,
+                                  messagebox: MagicMock) -> None:
+    messagebox.askyesno.return_value = True
+    dialog.staff_tree.selection_set('0')
+    dialog.issue_temporary_password()
+    assert messagebox.showerror.call_args.args == (constants.ERROR_TITLE, constants.EMR_ID_REQUIRED_MESSAGE)
+
+    dialog._on_staff_selected()
+    dialog.staff_emr_id_var.set('A01')
+    dialog.staff_role_var.set(constants.ADMIN_ROLE_LABEL)
+    dialog.save_staff()
+    dialog.staff_tree.selection_set('0')
+    dialog.issue_temporary_password()
+
+    password = messagebox.showinfo.call_args.args[1].split(': ')[1].split()[0]
+    result = analyzer.authenticate('A01', password)
+    assert result is not None and result.must_change_password
+    assert analyzer.login_required()
+
+
 def test_save_and_delete_department(dialog: MasterDialog, analyzer: MedicalDocsAnalyzer,
                                     messagebox: MagicMock) -> None:
     dialog.department_name_var.set('眼科')

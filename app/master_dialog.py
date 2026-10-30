@@ -76,6 +76,8 @@ class MasterDialog:
             row=0, column=0, padx=5)
         ttk.Button(self.staff_button_frame, text=constants.SAVE_BUTTON_LABEL, command=self.save_staff).grid(
             row=0, column=1, padx=5)
+        ttk.Button(self.staff_button_frame, text=constants.ISSUE_PASSWORD_BUTTON_LABEL,
+                   command=self.issue_temporary_password).grid(row=0, column=2, padx=5)
 
     def _setup_department_tab(self, notebook: ttk.Notebook) -> None:
         frame = ttk.Frame(notebook, padding="5")
@@ -170,6 +172,22 @@ class MasterDialog:
             messagebox.showerror(constants.ERROR_TITLE, constants.DUPLICATE_STAFF_MESSAGE, parent=self.dialog)
             return
         self.refresh()
+
+    def issue_temporary_password(self) -> None:
+        staff = self.selected_staff()
+        if staff is None or staff.id is None:
+            return
+        if not staff.emr_id:
+            messagebox.showerror(constants.ERROR_TITLE, constants.EMR_ID_REQUIRED_MESSAGE, parent=self.dialog)
+            return
+        if not messagebox.askyesno(constants.CONFIRM_TITLE,
+                                   constants.ISSUE_PASSWORD_CONFIRM_MESSAGE.format(name=staff.name),
+                                   parent=self.dialog):
+            return
+        password = self.analyzer.issue_temporary_password(staff.id)
+        messagebox.showinfo(constants.ISSUE_PASSWORD_BUTTON_LABEL,
+                            constants.TEMPORARY_PASSWORD_MESSAGE.format(name=staff.name, password=password),
+                            parent=self.dialog)
 
     def save_department(self) -> None:
         selected = self.selected_department()

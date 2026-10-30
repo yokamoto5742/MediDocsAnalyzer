@@ -11,6 +11,7 @@ from app import constants
 from app.app_window import MedicalDocsAnalyzerGUI
 from service.service_data_analyzer import DocumentCounts, StaffCounts
 from service.service_excel_reader import Document, NoDataError, RowError, SourceData
+from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, OverallSummary
 from utils.config_manager import load_config
 
@@ -236,6 +237,25 @@ def test_export_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, me
 
     messagebox.showerror.assert_called_once_with(
         constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error='locked'))
+
+
+def test_staff_user_sees_only_own_summary(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
+    with patch('app.app_window.MedicalDocsAnalyzer'):
+        gui = MedicalDocsAnalyzerGUI(root, Staff(2, '花﨑', 2, emr_id='S01'))
+
+    assert gui.root.title().endswith('花﨑')
+    assert all(button.instate(['disabled']) for button in gui.admin_buttons)
+    assert gui.result_view.notebook.tab(gui.result_view.overall_tab, 'state') == 'hidden'
+    gui.result_view.set_staff_names(['植田', '花﨑'])
+    assert gui.result_view.staff_combobox.cget('values') == ('花﨑',)
+
+
+def test_admin_user_can_use_everything(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
+    with patch('app.app_window.MedicalDocsAnalyzer'):
+        gui = MedicalDocsAnalyzerGUI(root, Staff(1, '植田', 1, emr_id='A01', role=ADMIN_ROLE))
+
+    assert not any(button.instate(['disabled']) for button in gui.admin_buttons)
+    assert gui.result_view.notebook.tab(gui.result_view.overall_tab, 'state') == 'normal'
 
 
 def test_open_config_opens_notepad(gui: MedicalDocsAnalyzerGUI) -> None:

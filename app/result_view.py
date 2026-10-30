@@ -55,6 +55,8 @@ class ResultView:
 
     def __init__(self, parent: tk.Misc, on_export_overall: Callable[[], None],
                  on_export_staff: Callable[[], None], on_staff_selected: Callable[[], None]) -> None:
+        # 職員としてログインしたときの本人の氏名。None なら全員分を見られる
+        self.restricted_staff: str | None = None
         self.notebook = ttk.Notebook(parent)
         self.overall_tab = ttk.Frame(self.notebook, padding="5")
         self.staff_tab = ttk.Frame(self.notebook, padding="5")
@@ -104,7 +106,16 @@ class ResultView:
         fill_tree(self.overall_tree, [constants.STAFF_NAME_HEADER, *summary.departments], overall_rows(summary))
         self.overall_chart.show(overall_figure(summary))
 
+    def restrict_to_staff(self, staff_name: str) -> None:
+        """全体タブを隠し、個人タブを staff_name だけにする"""
+        self.restricted_staff = staff_name
+        self.notebook.hide(self.overall_tab)
+        self.staff_combobox.state(['disabled'])
+        self.set_staff_names([staff_name])
+
     def set_staff_names(self, names: list[str]) -> None:
+        if self.restricted_staff is not None:
+            names = [self.restricted_staff]
         self.staff_combobox.configure(values=names)
         if self.staff_var.get() not in names:
             self.staff_var.set(names[0] if names else '')

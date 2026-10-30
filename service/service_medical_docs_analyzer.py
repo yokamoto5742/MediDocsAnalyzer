@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from service import service_master
+from service import service_auth, service_master
+from service.service_auth import LoginResult
 from service.service_backup import backup_database_daily
 from service.service_data_analyzer import DocumentCounts, StaffCounts, count_documents, count_staff_documents
 from service.service_database import (count_all_documents, count_documents_between, open_database,
@@ -117,6 +118,25 @@ class MedicalDocsAnalyzer:
     def save_staff(self, staff: Staff) -> None:
         with self._open_database() as connection:
             service_master.save_staff(connection, staff)
+
+    def login_required(self) -> bool:
+        with self._open_database() as connection:
+            return service_auth.login_required(connection)
+
+    def authenticate(self, emr_id: str, password: str) -> LoginResult | None:
+        with self._open_database() as connection:
+            return service_auth.authenticate(connection, emr_id, password)
+
+    def change_password(self, staff_id: int, password: str) -> None:
+        with self._open_database() as connection:
+            service_auth.set_password(connection, staff_id, password, must_change=False)
+
+    def issue_temporary_password(self, staff_id: int) -> str:
+        """仮パスワードを設定して返す。次のログインで変更を求める"""
+        password = service_auth.make_temporary_password()
+        with self._open_database() as connection:
+            service_auth.set_password(connection, staff_id, password, must_change=True)
+        return password
 
     def list_departments(self) -> list[Department]:
         with self._open_database() as connection:
