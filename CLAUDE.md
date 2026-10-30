@@ -7,11 +7,13 @@ Windows専用のtkinter GUIアプリ。医療文書の記録をExcelから読み
 ## 構成
 
 - `app/`: GUI(`MedicalDocsAnalyzerGUI`)、`PathSettingsDialog`、`constants.py`(UI文言はすべてここに定数で置く)。
-- `service/service_medical_docs_analyzer.py`: `MedicalDocsAnalyzer` が統括する。`load_data()` は元データをDBに取り込んでからバックアップし、`run_analysis(start, end)` は集計結果を出力してパスを返す。例外は握りつぶさず GUI まで送る(`NoDataError` は専用メッセージを出す)。
-- `service/`: `service_excel_reader`(全セルを文字列に統一し、日付は `YYYY/MM/DD`、患者IDは数値表記にそろえる)、`service_data_analyzer`(polars で結合・重複排除・期間フィルタ・集計)、`service_excel_writer`(DB書き換え・バックアップ・テンプレート出力)。
+- `service/service_medical_docs_analyzer.py`: `MedicalDocsAnalyzer` が統括する。データ読込は `prepare_import()` で計画(`ImportPlan`)を作り、GUI で確認してから `apply_import()` で書く。例外は握りつぶさず GUI まで送る(`NoDataError` は専用メッセージを出す)。
+- `service/`: `service_excel_reader`(見出し名で列を探し、`Document` とエラー行 `RowError` に分ける)、`service_database`(SQLite の接続・スキーマ・文書の入れ替え)、`service_data_analyzer`(SQL で集計)、`service_backup`(起動時の日次バックアップ)、`service_excel_writer`(テンプレート出力)。
 - `utils/`: `config_manager.py`、`date_period.py`(年・期間・年の始まりの月から開始日と終了日を求める)。
-- 集計対象の条件: 医師依頼日と担当者名が空でなく、預り日が期間内の行。預り日・患者ID・文書名・診療科・医師名で重複排除する。
-- DB ファイルの形式(A〜I列、日付は `YYYY/MM/DD` 文字列、患者IDは数値)は既存ファイルとの互換のため変えない。
+- DB は SQLite(共有フォルダに置くため `journal_mode=DELETE`)。日付は ISO 形式の文字列。患者名・患者ID・備考は取り込まない。
+- 取り込みは範囲置き換え: 元データで最も古い預り日(下書きの行も含む)以降の DB の文書を消して入れ直す。元データで削除した行(取り消し)も DB から消える。DB が空なら先に `legacy_database_path`(旧 xlsx の DB)を取り込む。
+- 文書にするのは医師依頼日と担当者名がある行。空なら下書きとして飛ばす。日付が読めない・医師依頼日が預り日より前の行はエラー行として除き、一覧に出す。
+- 集計対象は預り日が期間内の文書。
 
 ## 設定
 

@@ -14,9 +14,17 @@ def dialog(config_path: Path, root: tk.Tk) -> PathSettingsDialog:
 
 
 def test_init_shows_saved_paths(dialog: PathSettingsDialog, config_path: Path) -> None:
-    assert list(dialog.path_vars) == ['source_file_path', 'database_path', 'backup_dir', 'template_path',
-                                      'output_dir']
-    assert dialog.path_vars['database_path'].get() == str(config_path.parent / 'database.xlsx')
+    assert list(dialog.path_vars) == ['source_file_path', 'database_path', 'legacy_database_path', 'backup_dir',
+                                      'template_path', 'output_dir']
+    assert dialog.path_vars['database_path'].get() == str(config_path.parent / 'database.db')
+
+
+def test_choose_database_allows_new_file(dialog: PathSettingsDialog) -> None:
+    with patch('app.path_settings_dialog.filedialog.asksaveasfilename', return_value='D:/共有/new.db') as ask:
+        dialog._choose_database('database_path')
+
+    assert dialog.path_vars['database_path'].get() == 'D:\\共有\\new.db'
+    assert ask.call_args.kwargs['confirmoverwrite'] is False
 
 
 def test_choose_file_converts_slashes(dialog: PathSettingsDialog) -> None:

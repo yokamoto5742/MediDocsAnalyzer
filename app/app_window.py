@@ -6,9 +6,10 @@ from tkinter import messagebox, ttk
 from tkcalendar import DateEntry
 
 from app import __version__, constants
+from app.import_errors_dialog import ImportErrorsDialog
 from app.path_settings_dialog import PathSettingsDialog
 from service.service_excel_reader import NoDataError
-from service.service_medical_docs_analyzer import MedicalDocsAnalyzer
+from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
 from utils.config_manager import CONFIG_PATH, load_config, save_config
 from utils.date_period import PERIOD_NAMES, get_period_range, parse_date
 
@@ -27,6 +28,7 @@ class MedicalDocsAnalyzerGUI:
         self.root.geometry(f"{window_width}x{window_height}")
 
         self._setup_gui()
+        self.backup_database()
 
     def _setup_gui(self) -> None:
         main_frame = ttk.Frame(self.root, padding="10")
@@ -110,15 +112,35 @@ class MedicalDocsAnalyzerGUI:
         ttk.Button(parent, text="閉じる", command=self.root.quit).grid(
             row=6, column=0, columnspan=2, pady=5)
 
+    def backup_database(self) -> None:
+        try:
+            self.analyzer.backup_database(date.today())
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.BACKUP_ERROR_MESSAGE.format(error=e))
+
     def load_data(self) -> None:
         try:
-            count = self.analyzer.load_data()
+            plan = self.analyzer.prepare_import()
+            if not messagebox.askyesno(constants.CONFIRM_TITLE, self._import_confirm_message(plan)):
+                return
+            count = self.analyzer.apply_import(plan)
         except NoDataError:
             messagebox.showerror(constants.ERROR_TITLE, constants.NO_SOURCE_DATA_MESSAGE)
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.LOAD_ERROR_MESSAGE.format(error=e))
         else:
             messagebox.showinfo(constants.COMPLETE_TITLE, constants.LOAD_COMPLETE_MESSAGE.format(count=count))
+            if plan.errors:
+                ImportErrorsDialog(self.root, plan.errors)
+
+    @staticmethod
+    def _import_confirm_message(plan: ImportPlan) -> str:
+        message = constants.IMPORT_CONFIRM_MESSAGE.format(
+            start_date=plan.start_date, deleted=plan.deleted_count,
+            inserted=len(plan.source.documents), errors=len(plan.errors))
+        if plan.legacy is not None:
+            message = constants.LEGACY_IMPORT_MESSAGE.format(count=len(plan.legacy.documents)) + message
+        return message
 
     def start_analysis(self) -> None:
         # get_date() は手入力がフォーカスを外れるまで反映されないため、入力欄の文字列を読む

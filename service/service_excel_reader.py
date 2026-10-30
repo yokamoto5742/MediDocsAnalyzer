@@ -1,56 +1,134 @@
+import re
+from dataclasses import dataclass, field
 from datetime import date, datetime
+from pathlib import Path
 
-import polars as pl
 from openpyxl import load_workbook
+from openpyxl.utils.datetime import from_excel
 
-DATE_FORMAT = '%Y/%m/%d'
-COLUMN_COUNT = 9  # A〜I列
-DATE_COLUMNS = ('預り日', '医師依頼日')
-PATIENT_ID_COLUMN = '患者ID'
+DATE_PATTERN = re.compile(r'\d{4}/\d{1,2}/\d{1,2}')
+RECEIVED_DATE_COLUMN = '預り日'
+REQUESTED_DATE_COLUMN = '医師依頼日'
+STAFF_COLUMN = '担当者名'
+TEXT_COLUMNS = ('文書名', '診療科', '医師名', STAFF_COLUMN)
+REQUIRED_COLUMNS = (RECEIVED_DATE_COLUMN, REQUESTED_DATE_COLUMN, *TEXT_COLUMNS)
 
 
 class NoDataError(Exception):
     """対象となるデータが 1 件もない"""
 
 
-def to_date_text(value: object) -> str:
-    """日付を YYYY/MM/DD の文字列にする(時刻があれば落とす)"""
-    if isinstance(value, (datetime, date)):
-        return value.strftime(DATE_FORMAT)
-    text = str(value).strip()
-    return text.split()[0].replace('-', '/') if text else ''
+@dataclass(frozen=True)
+class Document:
+    received_date: date
+    requested_date: date
+    document_name: str
+    department: str
+    doctor_name: str
+    staff_name: str
 
 
-def to_patient_id_text(value: object) -> str:
-    """数値として読める患者IDは先頭の 0 などをそろえる(例: '00123' → '123')"""
+@dataclass(frozen=True)
+class RowError:
+    file_name: str
+    row_number: int
+    reason: str
+    row_text: str
+
+
+@dataclass
+class SourceData:
+    documents: list[Document] = field(default_factory=list)
+    errors: list[RowError] = field(default_factory=list)
+    first_received_date: date | None = None
+
+
+def to_date(value: object) -> date | None:
+    """日付・Excel のシリアル値・'YYYY/MM/DD' 形式の文字列を日付にする。空なら None、読めなければ ValueError"""
+    if value is None or str(value).strip() == '':
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return from_excel(value).date()
+    text = str(value).strip().split()[0].replace('-', '/')
+    if not DATE_PATTERN.fullmatch(text):
+        raise ValueError(text)
+    return datetime.strptime(text, '%Y/%m/%d').date()
+
+
+def to_text(value: object) -> str:
+    return '' if value is None else str(value).strip()
+
+
+def row_error_reason(cells: dict[str, object], known_staff: set[str] | None) -> str | None:
     try:
-        return str(int(str(value).strip()))
+        received = to_date(cells[RECEIVED_DATE_COLUMN])
     except ValueError:
-        return str(value)
+        return '預り日が日付ではありません'
+    if received is None:
+        return '預り日が空です'
+    try:
+        requested = to_date(cells[REQUESTED_DATE_COLUMN])
+    except ValueError:
+        return '医師依頼日が日付ではありません'
+    if requested is not None and requested < received:
+        return '医師依頼日が預り日より前です'
+    staff = to_text(cells[STAFF_COLUMN])
+    if requested is not None and staff and known_staff is not None and staff not in known_staff:
+        return '担当者名がマスタに登録されていません'
+    return None
 
 
-def to_cell_text(header: str, value: object) -> str:
-    if value is None or value == '':
-        return ''
-    if header in DATE_COLUMNS:
-        return to_date_text(value)
-    if header == PATIENT_ID_COLUMN:
-        return to_patient_id_text(value)
-    return str(value)
+def read_documents(file_path: str, known_staff: set[str] | None = None) -> SourceData:
+    """1 行目を見出しとして読み、医師依頼日と担当者名がある行を文書として返す。
 
-
-def read_documents(file_path: str) -> pl.DataFrame:
-    """1 行目を見出しとして A〜I列を読み、全セルを文字列(空は '')にして返す"""
-    wb = load_workbook(file_path, read_only=True)
+    空欄の行は下書きとして飛ばし、日付が読めない行などはエラーとして返す。
+    first_received_date には、読めた預り日のうち最も古い日付(下書きを含む)を入れる。
+    """
+    wb = load_workbook(file_path, read_only=True, data_only=True)
     sheet = wb.active
     assert sheet is not None
-    rows = sheet.iter_rows(max_col=COLUMN_COUNT, values_only=True)
-    header_row = next(rows, ())
-    headers = [str(value) for value in header_row if value is not None]
+    rows = sheet.iter_rows(values_only=True)
+    headers = [to_text(value) for value in next(rows, ())]
+    missing = [column for column in REQUIRED_COLUMNS if column not in headers]
+    if missing:
+        wb.close()
+        raise ValueError(f'{Path(file_path).name} に列がありません: {", ".join(missing)}')
 
-    records = [
-        [to_cell_text(header, value) for header, value in zip(headers, row)]
-        for row in rows
-    ]
+    column_indexes = {column: headers.index(column) for column in REQUIRED_COLUMNS}
+    source = SourceData()
+    for row_number, row in enumerate(rows, start=2):
+        cells: dict[str, object] = {column: row[index] if index < len(row) else None
+                                    for column, index in column_indexes.items()}
+        if all(to_text(value) == '' for value in cells.values()):
+            continue
+        _add_row(source, cells, row_number, Path(file_path).name, known_staff)
     wb.close()
-    return pl.DataFrame(records, schema={header: pl.String for header in headers}, orient='row')
+    return source
+
+
+def _add_row(source: SourceData, cells: dict[str, object], row_number: int, file_name: str,
+             known_staff: set[str] | None) -> None:
+    # 預り日が読める行は、エラーでも取り込み範囲の起点に含める
+    try:
+        received = to_date(cells[RECEIVED_DATE_COLUMN])
+    except ValueError:
+        received = None
+    if received is not None and (source.first_received_date is None or received < source.first_received_date):
+        source.first_received_date = received
+
+    reason = row_error_reason(cells, known_staff)
+    if reason is not None:
+        row_text = ' | '.join(to_text(value) for value in cells.values())
+        source.errors.append(RowError(file_name, row_number, reason, row_text))
+        return
+
+    requested = to_date(cells[REQUESTED_DATE_COLUMN])
+    staff = to_text(cells[STAFF_COLUMN])
+    if received is None or requested is None or not staff:
+        return
+    source.documents.append(Document(received, requested, to_text(cells['文書名']),
+                                     to_text(cells['診療科']), to_text(cells['医師名']), staff))

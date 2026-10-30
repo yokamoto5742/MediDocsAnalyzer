@@ -1,63 +1,12 @@
 import os
-import shutil
 from pathlib import Path
 
-import polars as pl
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment
+from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from service.service_data_analyzer import DocumentCounts
-from service.service_excel_reader import COLUMN_COUNT, PATIENT_ID_COLUMN
 
-CENTER_COLUMNS = (1, 2, 5, 6, 7, 8)  # A, B, E, F, G, H列
 TOTAL_LABEL = '合計'
-
-
-def to_database_value(header: str, text: str) -> str | int | None:
-    if text == '':
-        return None
-    if header == PATIENT_ID_COLUMN and text.isdigit():
-        return int(text)
-    return text
-
-
-def apply_cell_formats(sheet: Worksheet, last_row: int) -> None:
-    for row in range(2, last_row + 1):
-        for column in range(1, COLUMN_COUNT + 1):
-            if column in CENTER_COLUMNS:
-                alignment = Alignment(horizontal='center', vertical='center')
-            else:
-                alignment = Alignment(horizontal='left', vertical='center', shrink_to_fit=True)
-            sheet.cell(row=row, column=column).alignment = alignment
-
-
-def write_database(df: pl.DataFrame, file_path: str) -> None:
-    """DB を df の内容で書き換える。既存ファイルなら書式を残して値だけ入れ替える"""
-    wb = load_workbook(file_path) if Path(file_path).exists() else Workbook()
-    sheet = wb.active
-    assert sheet is not None
-
-    for row in sheet.iter_rows(max_col=COLUMN_COUNT):
-        for cell in row:
-            cell.value = None
-
-    for column_index, header in enumerate(df.columns, start=1):
-        sheet.cell(row=1, column=column_index, value=header)
-    for row_index, row in enumerate(df.iter_rows(), start=2):
-        for column_index, (header, text) in enumerate(zip(df.columns, row), start=1):
-            sheet.cell(row=row_index, column=column_index, value=to_database_value(header, text))
-
-    apply_cell_formats(sheet, df.height + 1)
-    wb.save(file_path)
-
-
-def backup_file(file_path: str, backup_dir: str) -> str:
-    backup_dir_path = Path(backup_dir)
-    backup_dir_path.mkdir(parents=True, exist_ok=True)
-    backup_path = backup_dir_path / f'backup_{Path(file_path).name}'
-    shutil.copy2(file_path, backup_path)
-    return str(backup_path)
 
 
 def write_counts(sheet: Worksheet, counts: DocumentCounts, staff_members: list[str],

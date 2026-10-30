@@ -15,10 +15,14 @@ window_height = 450
 
 [PATHS]
 source_file_path = {tmp_path / 'source.xlsx'}
-database_path = {tmp_path / 'database.xlsx'}
+database_path = {tmp_path / 'database.db'}
+legacy_database_path = {tmp_path / 'legacy.xlsx'}
 backup_dir = {tmp_path / 'backup'}
 template_path = {tmp_path / 'template.xlsx'}
 output_dir = {tmp_path / 'output'}
+
+[Backup]
+keep_generations = 30
 
 [Analysis]
 start_date = 2025-04-01

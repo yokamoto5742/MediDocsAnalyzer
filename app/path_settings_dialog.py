@@ -6,6 +6,7 @@ from app import constants
 from utils.config_manager import load_config, save_config
 
 EXCEL_FILE_TYPES = [(constants.EXCEL_FILE_TYPE_LABEL, '*.xlsx *.xlsm')]
+DATABASE_FILE_TYPES = [(constants.DATABASE_FILE_TYPE_LABEL, '*.db')]
 
 
 class PathSettingsDialog:
@@ -18,7 +19,8 @@ class PathSettingsDialog:
         paths_config = load_config()['PATHS']
         path_rows: list[tuple[str, str, Callable[[str], None]]] = [
             ('source_file_path', constants.SOURCE_FILE_LABEL, self._choose_file),
-            ('database_path', constants.DATABASE_FILE_LABEL, self._choose_file),
+            ('database_path', constants.DATABASE_FILE_LABEL, self._choose_database),
+            ('legacy_database_path', constants.LEGACY_DATABASE_FILE_LABEL, self._choose_file),
             ('backup_dir', constants.BACKUP_DIR_LABEL, self._choose_directory),
             ('template_path', constants.TEMPLATE_FILE_LABEL, self._choose_file),
             ('output_dir', constants.OUTPUT_DIR_LABEL, self._choose_directory),
@@ -45,6 +47,13 @@ class PathSettingsDialog:
 
     def _choose_file(self, key: str) -> None:
         selected = filedialog.askopenfilename(parent=self.dialog, filetypes=EXCEL_FILE_TYPES)
+        if selected:
+            self.path_vars[key].set(selected.replace('/', '\\'))
+
+    def _choose_database(self, key: str) -> None:
+        # まだ無いファイルも選べるよう、保存ダイアログで選ぶ
+        selected = filedialog.asksaveasfilename(parent=self.dialog, filetypes=DATABASE_FILE_TYPES,
+                                                defaultextension='.db', confirmoverwrite=False)
         if selected:
             self.path_vars[key].set(selected.replace('/', '\\'))
 
