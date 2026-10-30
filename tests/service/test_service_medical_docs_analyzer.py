@@ -8,6 +8,7 @@ from openpyxl import Workbook, load_workbook
 from service import service_excel_writer
 from service.service_database import open_database
 from service.service_excel_reader import NoDataError
+from service.service_master import Department
 from service.service_medical_docs_analyzer import MedicalDocsAnalyzer, split_list
 from tests.service.conftest import MakeWorkbook
 
@@ -73,6 +74,17 @@ def test_import_skips_legacy_database_when_database_has_documents(config_path: P
     assert analyzer.apply_import(plan) == 1
 
 
+def test_prepare_import_rejects_staff_not_in_master(config_path: Path, make_workbook: MakeWorkbook) -> None:
+    make_workbook(config_path.parent / 'source.xlsx', [
+        ['2025/04/03', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/04', '未登録'],
+    ])
+
+    plan = MedicalDocsAnalyzer().prepare_import()
+
+    assert [error.reason for error in plan.errors] == ['担当者名がマスタに登録されていません']
+    assert plan.source.documents == []
+
+
 def test_prepare_import_raises_when_source_is_empty(config_path: Path, make_workbook: MakeWorkbook) -> None:
     make_workbook(config_path.parent / 'source.xlsx', [])
 
@@ -114,6 +126,33 @@ def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook, startfile:
         ['合計', 2, 1, 1],
     ]
     startfile.assert_called_once()
+
+
+def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkbook, startfile: MagicMock) -> None:
+    tmp_path = config_path.parent
+    Workbook().save(tmp_path / 'template.xlsx')
+    make_workbook(tmp_path / 'source.xlsx', [
+        ['2025/04/01', 1, '山田', '診断書', '眼科', '佐藤', None, '2025/04/02', '植田'],
+    ])
+    analyzer = MedicalDocsAnalyzer()
+    analyzer.apply_import(analyzer.prepare_import())
+    ueda, okino, _ = analyzer.list_staff()
+    ueda.active = False
+    okino.active = False
+    analyzer.save_staff(ueda)
+    analyzer.save_staff(okino)
+    analyzer.save_department(None, Department('眼科', 0))
+
+    output_path = analyzer.run_analysis(date(2025, 4, 1), date(2025, 4, 30))
+
+    sheet = load_workbook(output_path).active
+    assert sheet is not None
+    assert [list(row) for row in sheet.iter_rows(min_row=2, values_only=True)] == [
+        ['氏名', '合計', '眼科', '内科', '外科'],
+        ['植田', 1, 1, 0, 0],
+        ['花﨑', 0, 0, 0, 0],
+        ['合計', 1, 1, 0, 0],
+    ]
 
 
 def test_run_analysis_raises_when_no_data_in_period(config_path: Path) -> None:

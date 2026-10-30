@@ -19,6 +19,21 @@ CREATE TABLE IF NOT EXISTS documents (
     staff_name TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_documents_received_date ON documents (received_date);
+CREATE TABLE IF NOT EXISTS staff (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    display_order INTEGER NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    emr_id TEXT UNIQUE,
+    role TEXT NOT NULL DEFAULT 'staff',
+    password_hash TEXT,
+    password_salt TEXT,
+    must_change_password INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS departments (
+    name TEXT PRIMARY KEY,
+    display_order INTEGER NOT NULL
+);
 """
 
 

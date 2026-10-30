@@ -7,6 +7,7 @@ from tkcalendar import DateEntry
 
 from app import __version__, constants
 from app.import_errors_dialog import ImportErrorsDialog
+from app.master_dialog import MasterDialog
 from app.path_settings_dialog import PathSettingsDialog
 from service.service_excel_reader import NoDataError
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
@@ -105,12 +106,14 @@ class MedicalDocsAnalyzerGUI:
             row=2, column=0, columnspan=2, pady=10)
         ttk.Button(parent, text="集計開始", command=self.start_analysis).grid(
             row=3, column=0, columnspan=2, pady=10)
-        ttk.Button(parent, text="ファイルパス", command=self.open_path_settings).grid(
+        ttk.Button(parent, text="マスタ", command=self.open_master).grid(
             row=4, column=0, columnspan=2, pady=5)
-        ttk.Button(parent, text="設定", command=self.open_config).grid(
+        ttk.Button(parent, text="ファイルパス", command=self.open_path_settings).grid(
             row=5, column=0, columnspan=2, pady=5)
-        ttk.Button(parent, text="閉じる", command=self.root.quit).grid(
+        ttk.Button(parent, text="設定", command=self.open_config).grid(
             row=6, column=0, columnspan=2, pady=5)
+        ttk.Button(parent, text="閉じる", command=self.root.quit).grid(
+            row=7, column=0, columnspan=2, pady=5)
 
     def backup_database(self) -> None:
         try:
@@ -173,6 +176,12 @@ class MedicalDocsAnalyzerGUI:
             'year_start_month': str(self.year_start_month_var.get())
         })
         save_config(self.config)
+
+    def open_master(self) -> None:
+        try:
+            MasterDialog(self.root, self.analyzer)
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.MASTER_OPEN_ERROR_MESSAGE.format(error=e))
 
     def open_path_settings(self) -> None:
         PathSettingsDialog(self.root)
