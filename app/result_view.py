@@ -9,7 +9,18 @@ from matplotlib.figure import Figure
 from app import constants
 from app.charts import overall_figure, staff_figure
 from service.service_data_analyzer import StaffCounts
-from service.service_medical_docs_analyzer import OverallSummary
+from service.service_excel_reader import Draft
+from service.service_medical_docs_analyzer import OverallSummary, Overview
+
+OVERVIEW_COLUMN_WIDTHS = (90, 80, 240, 100, 90, 80, 90, 150)
+
+
+def overview_row(draft: Draft) -> list[object]:
+    blanks = [label for label, blank in ((constants.STAFF_BLANK_LABEL, not draft.staff_name),
+                                         (constants.REQUESTED_BLANK_LABEL, draft.requested_date is None)) if blank]
+    requested = f'{draft.requested_date:%Y/%m/%d}' if draft.requested_date else ''
+    return [f'{draft.received_date:%Y/%m/%d}', draft.patient_id, draft.document_name, draft.department,
+            draft.doctor_name, draft.staff_name, requested, '・'.join(blanks)]
 
 
 def overall_rows(summary: OverallSummary) -> list[list[object]]:
@@ -52,7 +63,7 @@ class ChartArea:
 
 
 class ResultView:
-    """集計結果を「全体」「個人」のタブで表と図にして見せる"""
+    """「概要」タブで下書きの一覧を、「全体」「個人」タブで集計結果を表と図にして見せる"""
 
     def __init__(self, parent: tk.Misc, on_export_overall: Callable[[], None],
                  on_export_staff: Callable[[], None], on_staff_selected: Callable[[], None]) -> None:
@@ -64,12 +75,30 @@ class ResultView:
         # 並べ替えている列の番号と降順かどうか。None なら表示順のまま
         self.overall_sort: tuple[int, bool] | None = None
         self.notebook = ttk.Notebook(parent)
+        self.overview_tab = ttk.Frame(self.notebook, padding="5")
         self.overall_tab = ttk.Frame(self.notebook, padding="5")
         self.staff_tab = ttk.Frame(self.notebook, padding="5")
+        self.notebook.add(self.overview_tab, text=constants.OVERVIEW_TAB_LABEL)
         self.notebook.add(self.overall_tab, text=constants.OVERALL_TAB_LABEL)
         self.notebook.add(self.staff_tab, text=constants.STAFF_SUMMARY_TAB_LABEL)
+        self._setup_overview_tab()
         self._setup_overall_tab(on_export_overall)
         self._setup_staff_tab(on_export_staff, on_staff_selected)
+
+    def _setup_overview_tab(self) -> None:
+        tab = self.overview_tab
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(1, weight=1)
+        self.overview_title = ttk.Label(tab, text='')
+        self.overview_title.grid(row=0, column=0, columnspan=2, sticky=tk.W)
+        self.overview_tree = ttk.Treeview(tab, show='headings', columns=constants.OVERVIEW_COLUMNS)
+        for column, width in zip(constants.OVERVIEW_COLUMNS, OVERVIEW_COLUMN_WIDTHS):
+            self.overview_tree.heading(column, text=column)
+            self.overview_tree.column(column, width=width, minwidth=width, anchor=tk.W)
+        self.overview_tree.grid(row=1, column=0, sticky=tk.NSEW, pady=5)
+        scrollbar = ttk.Scrollbar(tab, orient=tk.VERTICAL, command=self.overview_tree.yview)
+        scrollbar.grid(row=1, column=1, sticky=tk.NS, pady=5)
+        self.overview_tree.configure(yscrollcommand=scrollbar.set)
 
     def _setup_overall_tab(self, on_export: Callable[[], None]) -> None:
         tab = self.overall_tab
@@ -105,6 +134,18 @@ class ResultView:
         self.staff_chart = ChartArea(tab)
         self.staff_chart.frame.grid(row=2, column=0, columnspan=2, sticky=tk.NSEW)
 
+    def show_overview(self, overview: Overview) -> None:
+        self.overview_title.configure(text=constants.OVERVIEW_TITLE_FORMAT.format(
+            start=overview.start_date, end=overview.end_date, total=len(overview.drafts),
+            unassigned=overview.unassigned_count, unrequested=overview.unrequested_count))
+        self.overview_tree.delete(*self.overview_tree.get_children())
+        for draft in overview.drafts:
+            self.overview_tree.insert('', tk.END, values=overview_row(draft))
+
+    def show_overview_error(self, error: Exception) -> None:
+        self.overview_title.configure(text=constants.OVERVIEW_ERROR_FORMAT.format(error=error))
+        self.overview_tree.delete(*self.overview_tree.get_children())
+
     def show_overall(self, summary: OverallSummary) -> None:
         counts = summary.counts
         self.overall_title.configure(text=constants.OVERALL_TITLE_FORMAT.format(
@@ -128,7 +169,7 @@ class ResultView:
             self.overall_tree.insert('', tk.END, values=row)
 
     def restrict_to_staff(self, staff_name: str) -> None:
-        """全体タブを隠し、個人タブを staff_name だけにする"""
+        """全体タブを隠し、個人タブを staff_name だけにする。概要タブは割り振りに使うため職員にも見せる"""
         self.restricted_staff = staff_name
         self.notebook.hide(self.overall_tab)
         self.staff_combobox.state(['disabled'])

@@ -3,6 +3,7 @@ from collections.abc import Callable
 from tkinter import filedialog, messagebox, ttk
 
 from app import constants
+from service.service_medical_docs_analyzer import DEFAULT_PENDING_DAYS
 from utils.config_manager import load_config, save_config
 
 EXCEL_FILE_TYPES = [(constants.EXCEL_FILE_TYPE_LABEL, '*.xlsx *.xlsm')]
@@ -12,7 +13,10 @@ NUMBER_SETTINGS: list[tuple[str, str, str, int, int]] = [
     ('Appearance', 'window_width', constants.WINDOW_WIDTH_LABEL, 800, 3840),
     ('Appearance', 'window_height', constants.WINDOW_HEIGHT_LABEL, 600, 2160),
     ('Backup', 'keep_generations', constants.KEEP_GENERATIONS_LABEL, 1, 365),
+    ('Overview', 'pending_days', constants.PENDING_DAYS_LABEL, 1, 365),
 ]
+# 古い設定ファイルに無い項目の初期値
+NUMBER_DEFAULTS = {'pending_days': str(DEFAULT_PENDING_DAYS)}
 
 
 class SettingsDialog:
@@ -34,7 +38,7 @@ class SettingsDialog:
             ('output_dir', constants.OUTPUT_DIR_LABEL, self._choose_directory),
         ]
         self.path_vars = {key: tk.StringVar(value=config['PATHS'].get(key, '')) for key, _, _ in path_rows}
-        self.number_vars = {key: tk.StringVar(value=config.get(section, key, fallback=''))
+        self.number_vars = {key: tk.StringVar(value=config.get(section, key, fallback=NUMBER_DEFAULTS.get(key, '')))
                             for section, key, _, _, _ in NUMBER_SETTINGS}
 
         frame = ttk.Frame(self.dialog, padding="10")
@@ -103,6 +107,8 @@ class SettingsDialog:
         config = load_config()
         config['PATHS'].update({key: var.get().strip() for key, var in self.path_vars.items()})
         for section, key, _, _, _ in NUMBER_SETTINGS:
+            if not config.has_section(section):
+                config.add_section(section)
             config[section][key] = str(int(self.number_vars[key].get().strip()))
         save_config(config)
         self.dialog.destroy()

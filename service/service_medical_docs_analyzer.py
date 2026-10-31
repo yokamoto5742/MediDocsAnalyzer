@@ -2,7 +2,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from service import service_auth, service_master
@@ -11,17 +11,42 @@ from service.service_backup import backup_database_daily
 from service.service_data_analyzer import DocumentCounts, StaffCounts, count_documents, count_staff_documents
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
-from service.service_excel_reader import NoDataError, RowError, SourceData, read_documents
+from service.service_excel_reader import Draft, NoDataError, RowError, SourceData, read_documents
 from service.service_excel_writer import TOTAL_LABEL, save_results, save_staff_results
 from service.service_master import Department, Staff
 from utils.config_manager import load_config
 
 DEFAULT_KEEP_GENERATIONS = 30
 TOP_DOCUMENT_COUNT = 10
+DEFAULT_PENDING_DAYS = 7
 
 
 def split_list(text: str) -> list[str]:
     return [item.strip() for item in text.split(',') if item.strip()]
+
+
+@dataclass
+class Overview:
+    """預り日が start_date〜end_date の下書き(担当者名か医師依頼日が空の行)"""
+    start_date: date
+    end_date: date
+    drafts: list[Draft]
+
+    @property
+    def unassigned_count(self) -> int:
+        return sum(1 for draft in self.drafts if not draft.staff_name)
+
+    @property
+    def unrequested_count(self) -> int:
+        return sum(1 for draft in self.drafts if draft.requested_date is None)
+
+
+def make_overview(drafts: list[Draft], today: date, days: int) -> Overview:
+    """本日を含めて days 日間に預かった下書きを、預り日の新しい順に並べる"""
+    start_date = today - timedelta(days=days - 1)
+    targets = [draft for draft in drafts if start_date <= draft.received_date <= today]
+    targets.sort(key=lambda draft: draft.received_date, reverse=True)
+    return Overview(start_date, today, targets)
 
 
 @dataclass
@@ -95,6 +120,15 @@ class MedicalDocsAnalyzer:
         with self._open_database() as connection:
             replace_documents_between(connection, plan.start_date, plan.end_date, plan.source.documents)
             return count_all_documents(connection)
+
+    def overview(self, drafts: list[Draft], today: date) -> Overview:
+        days = load_config().getint('Overview', 'pending_days', fallback=DEFAULT_PENDING_DAYS)
+        return make_overview(drafts, today, days)
+
+    def load_overview(self, today: date) -> Overview:
+        """元データを読み、概要を返す。下書きの判定にマスタは使わないため DB は開かない"""
+        source = read_documents(load_config()['PATHS']['source_file_path'])
+        return self.overview(source.drafts, today)
 
     def backup_database(self, today: date) -> Path | None:
         config = load_config()

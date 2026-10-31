@@ -10,10 +10,16 @@ import pytest
 from app import constants
 from app.app_window import MedicalDocsAnalyzerGUI
 from service.service_data_analyzer import DocumentCounts, StaffCounts
-from service.service_excel_reader import Document, NoDataError, RowError, SourceData
+from service.service_excel_reader import Document, Draft, NoDataError, RowError, SourceData
 from service.service_master import ADMIN_ROLE, Staff
-from service.service_medical_docs_analyzer import ImportPlan, OverallSummary
+from service.service_medical_docs_analyzer import ImportPlan, OverallSummary, Overview
 from utils.config_manager import load_config
+
+DRAFT = Draft(date(2025, 4, 1), None, '診断書', '内科', '佐藤', '', '1')
+
+
+def make_overview(drafts: list[Draft]) -> Overview:
+    return Overview(date(2025, 4, 1), date(2025, 4, 7), drafts)
 
 
 @pytest.fixture
@@ -24,7 +30,8 @@ def messagebox() -> Iterator[MagicMock]:
 
 @pytest.fixture
 def gui(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> Iterator[MedicalDocsAnalyzerGUI]:
-    with patch('app.app_window.MedicalDocsAnalyzer'):
+    with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
+        analyzer_class.return_value.load_overview.return_value = make_overview([])
         yield MedicalDocsAnalyzerGUI(root)
 
 
@@ -82,7 +89,8 @@ def test_apply_period_ignores_invalid_year(gui: MedicalDocsAnalyzerGUI) -> None:
 
 def make_plan(errors: list[RowError]) -> ImportPlan:
     source = SourceData(documents=[Document(date(2025, 4, 1), date(2025, 4, 2), '診断書', '内科', '佐藤', '植田')],
-                        errors=errors, first_received_date=date(2025, 4, 1), last_received_date=date(2025, 4, 30))
+                        errors=errors, drafts=[DRAFT],
+                        first_received_date=date(2025, 4, 1), last_received_date=date(2025, 4, 30))
     return ImportPlan(source, deleted_count=3)
 
 
@@ -97,6 +105,20 @@ def test_init_shows_backup_error(config_path: Path, root: tk.Tk, messagebox: Mag
 
     messagebox.showerror.assert_called_once_with(
         constants.ERROR_TITLE, constants.BACKUP_ERROR_MESSAGE.format(error='offline'))
+
+
+def test_init_shows_overview(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
+    analyzer.load_overview.assert_called_once_with(date.today())
+    assert gui.result_view.overview_title.cget('text').startswith('預り日 2025/04/01〜2025/04/07')
+
+
+def test_init_shows_overview_error_without_dialog(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
+    with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
+        analyzer_class.return_value.load_overview.side_effect = FileNotFoundError('missing')
+        gui = MedicalDocsAnalyzerGUI(root)
+
+    assert gui.result_view.overview_title.cget('text') == constants.OVERVIEW_ERROR_FORMAT.format(error='missing')
+    messagebox.showerror.assert_not_called()
 
 
 def test_load_excel_shows_completion(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
@@ -164,6 +186,7 @@ def test_start_analysis_shows_results_and_saves_settings(gui: MedicalDocsAnalyze
                                                          messagebox: MagicMock) -> None:
     plan = make_plan([])
     analyzer.prepare_source_import.return_value = plan
+    analyzer.overview.return_value = make_overview([DRAFT])
     analyzer.overall_summary.return_value = make_summary()
     analyzer.staff_summary.return_value = make_staff_counts('植田')
     set_dates(gui, '2025/10/01', '2025/12/31')
@@ -173,6 +196,8 @@ def test_start_analysis_shows_results_and_saves_settings(gui: MedicalDocsAnalyze
         gui.start_analysis()
 
     analyzer.apply_import.assert_called_once_with(plan)
+    analyzer.overview.assert_called_once_with([DRAFT], date.today())
+    assert len(gui.result_view.overview_tree.get_children()) == 1
     messagebox.askyesno.assert_not_called()
     dialog.assert_not_called()
     analyzer.overall_summary.assert_called_once_with(date(2025, 10, 1), date(2025, 12, 31))
@@ -280,6 +305,7 @@ def test_staff_user_sees_only_own_summary(config_path: Path, root: tk.Tk, messag
     assert gui.root.title().endswith('花﨑')
     assert all(button.instate(['disabled']) for button in gui.admin_buttons)
     assert gui.result_view.notebook.tab(gui.result_view.overall_tab, 'state') == 'hidden'
+    assert gui.result_view.notebook.tab(gui.result_view.overview_tab, 'state') == 'normal'
     gui.result_view.set_staff_names(['植田', '花﨑'])
     assert gui.result_view.staff_combobox.cget('values') == ('花﨑',)
 

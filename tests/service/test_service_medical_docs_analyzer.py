@@ -7,10 +7,11 @@ from openpyxl import Workbook, load_workbook
 
 from service import service_excel_writer
 from service.service_database import open_database
-from service.service_excel_reader import NoDataError
+from service.service_excel_reader import Draft, NoDataError
 from service.service_master import Department
-from service.service_medical_docs_analyzer import MedicalDocsAnalyzer, split_list
+from service.service_medical_docs_analyzer import MedicalDocsAnalyzer, make_overview, split_list
 from tests.service.conftest import MakeWorkbook
+from utils.config_manager import load_config, save_config
 
 
 @pytest.fixture
@@ -28,6 +29,53 @@ def database_rows(config_path: Path) -> list[tuple[str, str]]:
 
 def test_split_list() -> None:
     assert split_list(' 植田, 花﨑 ,,') == ['植田', '花﨑']
+
+
+def make_draft(received: date, requested: date | None = None, staff: str = '') -> Draft:
+    return Draft(received, requested, '診断書', '内科', '佐藤', staff, '1')
+
+
+def test_make_overview_keeps_drafts_within_days_newest_first() -> None:
+    drafts = [make_draft(date(2026, 10, 24)), make_draft(date(2026, 10, 25), staff='植田'),
+              make_draft(date(2026, 10, 31), requested=date(2026, 10, 31)), make_draft(date(2026, 11, 1))]
+
+    overview = make_overview(drafts, date(2026, 10, 31), 7)
+
+    assert (overview.start_date, overview.end_date) == (date(2026, 10, 25), date(2026, 10, 31))
+    assert [draft.received_date for draft in overview.drafts] == [date(2026, 10, 31), date(2026, 10, 25)]
+    assert (overview.unassigned_count, overview.unrequested_count) == (1, 1)
+
+
+def test_make_overview_counts_row_with_both_blank_in_both() -> None:
+    overview = make_overview([make_draft(date(2026, 10, 31))], date(2026, 10, 31), 1)
+
+    assert (overview.unassigned_count, overview.unrequested_count) == (1, 1)
+
+
+def test_load_overview_reads_source_with_configured_days(config_path: Path, make_workbook: MakeWorkbook) -> None:
+    make_workbook(config_path.parent / 'source.xlsx', [
+        ['2026/10/27', 1, '山田', '診断書', '内科', '佐藤', None, None, '未登録'],
+        ['2026/10/30', 2, '鈴木', '診断書', '内科', '佐藤', None, '2026/10/31', None],
+        ['2026/10/30', 3, '田中', '診断書', '内科', '佐藤', None, '2026/10/31', '植田'],
+    ])
+    config = load_config()
+    config['Overview'] = {'pending_days': '3'}
+    save_config(config)
+
+    overview = MedicalDocsAnalyzer().load_overview(date(2026, 10, 31))
+
+    assert overview.start_date == date(2026, 10, 29)
+    assert [draft.patient_id for draft in overview.drafts] == ['2']
+
+
+def test_load_overview_uses_seven_days_by_default(config_path: Path, make_workbook: MakeWorkbook) -> None:
+    make_workbook(config_path.parent / 'source.xlsx', [
+        ['2026/10/25', 1, '山田', '診断書', '内科', '佐藤', None, None, '植田'],
+    ])
+
+    overview = MedicalDocsAnalyzer().load_overview(date(2026, 10, 31))
+
+    assert [draft.patient_id for draft in overview.drafts] == ['1']
 
 
 def test_source_import_replaces_range_of_legacy_documents(config_path: Path, make_workbook: MakeWorkbook) -> None:

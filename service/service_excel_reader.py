@@ -31,6 +31,18 @@ class Document:
 
 
 @dataclass(frozen=True)
+class Draft:
+    """医師依頼日か担当者名が空の行(下書き)"""
+    received_date: date
+    requested_date: date | None
+    document_name: str
+    department: str
+    doctor_name: str
+    staff_name: str
+    patient_id: str
+
+
+@dataclass(frozen=True)
 class RowError:
     file_name: str
     row_number: int
@@ -43,6 +55,7 @@ class RowError:
 class SourceData:
     documents: list[Document] = field(default_factory=list)
     errors: list[RowError] = field(default_factory=list)
+    drafts: list[Draft] = field(default_factory=list)
     first_received_date: date | None = None
     last_received_date: date | None = None
 
@@ -89,7 +102,7 @@ def row_error_reason(cells: dict[str, object], known_staff: set[str] | None) -> 
 def read_documents(file_path: str, known_staff: set[str] | None = None) -> SourceData:
     """1 行目を見出しとして読み、医師依頼日と担当者名がある行を文書として返す。
 
-    空欄の行は下書きとして飛ばし、日付が読めない行などはエラーとして返す。
+    空欄の行は下書きとして drafts に入れ、日付が読めない行などはエラーとして返す。
     first_received_date / last_received_date には、読めた預り日(下書きを含む)の最も古い日・新しい日を入れる。
     """
     wb = load_workbook(file_path, read_only=True, data_only=True)
@@ -133,8 +146,10 @@ def _add_row(source: SourceData, cells: dict[str, object], row_number: int, file
 
     requested = to_date(cells[REQUESTED_DATE_COLUMN])
     staff = to_text(cells[STAFF_COLUMN])
-    if received is None or requested is None or not staff:
+    assert received is not None
+    texts = (to_text(cells['文書名']), to_text(cells['診療科']), to_text(cells['医師名']), staff,
+             to_text(cells[PATIENT_ID_COLUMN]))
+    if requested is None or not staff:
+        source.drafts.append(Draft(received, requested, *texts))
         return
-    source.documents.append(Document(received, requested, to_text(cells['文書名']),
-                                     to_text(cells['診療科']), to_text(cells['医師名']), staff,
-                                     to_text(cells[PATIENT_ID_COLUMN])))
+    source.documents.append(Document(received, requested, *texts))

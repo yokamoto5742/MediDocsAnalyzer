@@ -10,7 +10,7 @@ from app.login_dialog import ChangePasswordDialog
 from app.master_dialog import MasterDialog
 from app.result_view import ResultView
 from app.settings_dialog import SettingsDialog
-from service.service_excel_reader import NoDataError
+from service.service_excel_reader import Draft, NoDataError
 from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
 from utils.config_manager import load_config, save_config
@@ -37,6 +37,7 @@ class MedicalDocsAnalyzerGUI:
         self.period: tuple[date, date] | None = None
         self._setup_gui()
         self.backup_database()
+        self.refresh_overview()
 
     def _setup_gui(self) -> None:
         self.root.columnconfigure(1, weight=1)
@@ -144,6 +145,15 @@ class MedicalDocsAnalyzerGUI:
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.BACKUP_ERROR_MESSAGE.format(error=e))
 
+    def refresh_overview(self, drafts: list[Draft] | None = None) -> None:
+        """drafts が None なら元データを読み直す。起動のたびにダイアログを出さないよう、失敗はタブ内に出す"""
+        try:
+            overview = (self.analyzer.load_overview(date.today()) if drafts is None
+                        else self.analyzer.overview(drafts, date.today()))
+            self.result_view.show_overview(overview)
+        except Exception as e:
+            self.result_view.show_overview_error(e)
+
     def load_excel(self) -> None:
         """旧 DB(xlsx)を確認してから取り込む"""
         try:
@@ -166,20 +176,20 @@ class MedicalDocsAnalyzerGUI:
             start_date=plan.start_date, end_date=plan.end_date, deleted=plan.deleted_count,
             inserted=len(plan.source.documents), errors=len(plan.errors))
 
-    def _import_source(self) -> bool:
-        """元データ(xlsm)を確認なしで取り込む。取り込めたら True"""
+    def _import_source(self) -> ImportPlan | None:
+        """元データ(xlsm)を確認なしで取り込む。取り込めたら計画を、失敗したら None を返す"""
         try:
             plan = self.analyzer.prepare_source_import()
             self.analyzer.apply_import(plan)
         except NoDataError:
             messagebox.showerror(constants.ERROR_TITLE, constants.NO_SOURCE_DATA_MESSAGE)
-            return False
+            return None
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.LOAD_ERROR_MESSAGE.format(error=e))
-            return False
+            return None
         if plan.errors:
             ImportErrorsDialog(self.root, plan.errors)
-        return True
+        return plan
 
     def start_analysis(self) -> None:
         # get_date() は手入力がフォーカスを外れるまで反映されないため、入力欄の文字列を読む
@@ -194,8 +204,10 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.START_AFTER_END_MESSAGE)
             return
 
-        if not self._import_source():
+        plan = self._import_source()
+        if plan is None:
             return
+        self.refresh_overview(plan.source.drafts)
 
         try:
             self._save_analysis_settings(start_date, end_date)

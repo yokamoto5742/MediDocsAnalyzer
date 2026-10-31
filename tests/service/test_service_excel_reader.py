@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
-from service.service_excel_reader import Document, read_documents, to_date
+from service.service_excel_reader import Document, Draft, read_documents, to_date
 from tests.service.conftest import MakeWorkbook
 
 
@@ -52,6 +52,10 @@ def test_read_documents_skips_drafts_but_uses_their_received_date(tmp_path: Path
 
     assert [document.staff_name for document in source.documents] == ['植田']
     assert source.errors == []
+    assert source.drafts == [
+        Draft(date(2025, 4, 1), None, '診断書', '内科', '佐藤', '花﨑', '1'),
+        Draft(date(2025, 4, 2), date(2025, 4, 3), '診断書', '内科', '佐藤', '', '2'),
+    ]
     assert (source.first_received_date, source.last_received_date) == (date(2025, 4, 1), date(2025, 4, 5))
 
 

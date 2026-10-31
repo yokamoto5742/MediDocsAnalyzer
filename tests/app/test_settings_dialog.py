@@ -55,13 +55,15 @@ def test_save_writes_paths_and_keeps_other_settings(dialog: SettingsDialog) -> N
 
 
 def set_valid_numbers(dialog: SettingsDialog) -> None:
-    for key, value in (('window_width', ' 1250 '), ('window_height', '760'), ('keep_generations', '14')):
+    for key, value in (('window_width', ' 1250 '), ('window_height', '760'), ('keep_generations', '14'),
+                       ('pending_days', '10')):
         dialog.number_vars[key].set(value)
 
 
 def test_init_shows_saved_numbers(dialog: SettingsDialog) -> None:
+    # pending_days は一時の設定ファイルに無いため、初期値の 7 を出す
     assert {key: var.get() for key, var in dialog.number_vars.items()} == {
-        'window_width': '300', 'window_height': '450', 'keep_generations': '30'}
+        'window_width': '300', 'window_height': '450', 'keep_generations': '30', 'pending_days': '7'}
 
 
 def test_save_writes_numbers(dialog: SettingsDialog) -> None:
@@ -73,6 +75,18 @@ def test_save_writes_numbers(dialog: SettingsDialog) -> None:
     assert config['Appearance']['window_width'] == '1250'
     assert config['Appearance']['window_height'] == '760'
     assert config['Backup']['keep_generations'] == '14'
+    assert config['Overview']['pending_days'] == '10'
+
+
+def test_save_rejects_invalid_pending_days(dialog: SettingsDialog) -> None:
+    set_valid_numbers(dialog)
+    dialog.number_vars['pending_days'].set('0')
+
+    with patch('app.settings_dialog.messagebox') as messagebox:
+        dialog.save()
+
+    messagebox.showerror.assert_called_once()
+    assert not load_config().has_section('Overview')
 
 
 @pytest.mark.parametrize('value', ['abc', '0', '366', '-1', ''])
