@@ -1,5 +1,6 @@
 import csv
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -28,11 +29,24 @@ def test_copy_puts_tab_separated_text(dialog: ImportErrorsDialog) -> None:
     assert dialog.dialog.clipboard_get() == '\t'.join(constants.ERROR_COLUMNS) + '\n元データ.xlsm\t5\t123\t預り日が空です\t | 花﨑'
 
 
-def test_save_csv_writes_utf8_with_bom(dialog: ImportErrorsDialog, tmp_path: Path) -> None:
-    path = tmp_path / 'errors.csv'
-    with patch('app.import_errors_dialog.filedialog.asksaveasfilename', return_value=str(path)):
+def test_save_csv_writes_to_output_dir_and_opens_it(dialog: ImportErrorsDialog, config_path: Path) -> None:
+    output_dir = config_path.parent / 'output'
+    with patch('app.import_errors_dialog.datetime') as mock_datetime, \
+            patch('app.import_errors_dialog.os.startfile', create=True) as startfile:
+        mock_datetime.now.return_value = datetime(2026, 10, 31, 14, 30, 5)
         dialog.save_csv()
 
+    path = output_dir / '取込エラー行_20261031_143005.csv'
     assert path.read_bytes().startswith(b'\xef\xbb\xbf')
     with open(path, encoding='utf-8-sig', newline='') as f:
         assert list(csv.reader(f)) == [list(constants.ERROR_COLUMNS), ['元データ.xlsm', '5', '123', '預り日が空です', ' | 花﨑']]
+    startfile.assert_called_once_with(output_dir)
+
+
+def test_save_csv_shows_error(dialog: ImportErrorsDialog, config_path: Path) -> None:
+    with patch('app.import_errors_dialog.open', side_effect=PermissionError('locked'), create=True), \
+            patch('app.import_errors_dialog.messagebox') as messagebox:
+        dialog.save_csv()
+
+    messagebox.showerror.assert_called_once()
+    assert 'locked' in messagebox.showerror.call_args.args[1]

@@ -1,11 +1,13 @@
 import csv
+import os
 import tkinter as tk
-from tkinter import filedialog, ttk
+from datetime import datetime
+from pathlib import Path
+from tkinter import messagebox, ttk
 
 from app import constants
 from service.service_excel_reader import RowError
-
-CSV_FILE_TYPES = [(constants.CSV_FILE_TYPE_LABEL, '*.csv')]
+from utils.config_manager import load_config
 
 
 def error_rows(errors: list[RowError]) -> list[tuple[str, int, str, str, str]]:
@@ -56,11 +58,17 @@ class ImportErrorsDialog:
         self.dialog.clipboard_append('\n'.join(lines))
 
     def save_csv(self) -> None:
-        path = filedialog.asksaveasfilename(parent=self.dialog, filetypes=CSV_FILE_TYPES, defaultextension='.csv')
-        if not path:
-            return
-        # Excel で開いても文字化けしないよう BOM 付きにする
-        with open(path, 'w', encoding='utf-8-sig', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(constants.ERROR_COLUMNS)
-            writer.writerows(error_rows(self.errors))
+        """出力先フォルダに保存し、そのフォルダを開く"""
+        try:
+            output_dir = Path(load_config()['PATHS']['output_dir'])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            path = output_dir / constants.ERROR_CSV_FILE_NAME_FORMAT.format(now=datetime.now())
+            # Excel で開いても文字化けしないよう BOM 付きにする
+            with open(path, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(constants.ERROR_COLUMNS)
+                writer.writerows(error_rows(self.errors))
+            os.startfile(output_dir)
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.CSV_SAVE_ERROR_MESSAGE.format(error=e),
+                                 parent=self.dialog)

@@ -50,7 +50,7 @@ def test_save_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ['花﨑', 1, 0, 1],
         ['合計', 9, 3, 1],
     ]
-    startfile.assert_called_once_with(Path(output_path))
+    startfile.assert_called_once_with(tmp_path / 'output')
     sheet = active_sheet(output_path)
     assert len(getattr(sheet, '_charts')) == 1
     assert sheet.page_setup.orientation == 'landscape'
@@ -72,4 +72,4 @@ def test_save_staff_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert values[4][:8] == [DEPARTMENT, 3, None, DOCUMENT, 3, None, '2025/04', 2]
     assert values[5][6:8] == ['2025/05', 1]
     assert len(getattr(sheet, '_charts')) == 1
-    startfile.assert_called_once_with(Path(output_path))
+    startfile.assert_called_once_with(tmp_path / 'output')

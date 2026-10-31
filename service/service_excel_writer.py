@@ -47,7 +47,7 @@ def write_counts(sheet: Worksheet, counts: DocumentCounts, staff_members: list[s
 
 def save_results(counts: DocumentCounts, staff_members: list[str], departments: list[str],
                  template_path: str, output_dir: str) -> str:
-    """集計結果をテンプレートに書いて保存し、Excel で開いて保存先のパスを返す"""
+    """集計結果をテンプレートに書いて保存し、保存先のパスを返す"""
     wb = load_workbook(template_path)
     sheet = wb.active
     assert sheet is not None
@@ -63,13 +63,14 @@ def save_results(counts: DocumentCounts, staff_members: list[str], departments: 
 
 
 def save_and_open(wb: Workbook, output_dir: str, file_name: str) -> str:
-    """保存して Excel で開き(そこから印刷する)、保存先のパスを返す"""
+    """保存して出力先フォルダを開き、保存先のパスを返す"""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     output_file_path = output_path / file_name
     wb.save(output_file_path)
 
-    os.startfile(output_file_path)
+    # フォルダを開く(エクスプローラーは同じフォルダの窓が開いていれば、新しく開かずにそれを前に出す)
+    os.startfile(output_path)
 
     return str(output_file_path)
 
@@ -120,7 +121,7 @@ def write_table(sheet: Worksheet, row: int, column: int, headers: tuple[str, str
 
 
 def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: date, output_dir: str) -> str:
-    """1 人分の集計(診療科別・文書名別・月別と月別グラフ)を新しいブックに書いて保存し、Excel で開く"""
+    """1 人分の集計(診療科別・文書名別・月別と月別グラフ)を新しいブックに書いて保存する"""
     wb = Workbook()
     sheet = cast(Worksheet, wb.active)
     sheet.title = '個人'

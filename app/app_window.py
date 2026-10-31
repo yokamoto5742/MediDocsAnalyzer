@@ -1,4 +1,3 @@
-import subprocess
 import tkinter as tk
 from datetime import date
 from tkinter import messagebox, ttk
@@ -9,12 +8,12 @@ from app import __version__, constants
 from app.import_errors_dialog import ImportErrorsDialog
 from app.login_dialog import ChangePasswordDialog
 from app.master_dialog import MasterDialog
-from app.path_settings_dialog import PathSettingsDialog
 from app.result_view import ResultView
+from app.settings_dialog import SettingsDialog
 from service.service_excel_reader import NoDataError
 from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
-from utils.config_manager import CONFIG_PATH, load_config, save_config
+from utils.config_manager import load_config, save_config
 from utils.date_period import PERIOD_NAMES, get_period_range, parse_date
 
 DEFAULT_YEAR_START_MONTH = 4
@@ -128,18 +127,16 @@ class MedicalDocsAnalyzerGUI:
             row=2, column=0, columnspan=2, pady=10)
         master_button = ttk.Button(parent, text=constants.MASTER_BUTTON_LABEL, command=self.open_master)
         master_button.grid(row=3, column=0, columnspan=2, pady=5)
-        path_button = ttk.Button(parent, text="ファイルパス", command=self.open_path_settings)
-        path_button.grid(row=4, column=0, columnspan=2, pady=5)
         load_button = ttk.Button(parent, text=constants.EXCEL_IMPORT_BUTTON_LABEL, command=self.load_excel)
-        load_button.grid(row=5, column=0, columnspan=2, pady=5)
-        config_button = ttk.Button(parent, text="設定", command=self.open_config)
-        config_button.grid(row=6, column=0, columnspan=2, pady=5)
+        load_button.grid(row=4, column=0, columnspan=2, pady=5)
+        settings_button = ttk.Button(parent, text=constants.SETTINGS_BUTTON_LABEL, command=self.open_settings)
+        settings_button.grid(row=5, column=0, columnspan=2, pady=5)
         if self.user is not None:
             ttk.Button(parent, text=constants.CHANGE_PASSWORD_BUTTON_LABEL, command=self.change_password).grid(
-                row=7, column=0, columnspan=2, pady=5)
+                row=6, column=0, columnspan=2, pady=5)
         ttk.Button(parent, text="閉じる", command=self.root.quit).grid(
-            row=8, column=0, columnspan=2, pady=5)
-        self.admin_buttons = [load_button, master_button, path_button, config_button]
+            row=7, column=0, columnspan=2, pady=5)
+        self.admin_buttons = [load_button, master_button, settings_button]
 
     def backup_database(self) -> None:
         try:
@@ -245,7 +242,7 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
     def _save_analysis_settings(self, start_date: date, end_date: date) -> None:
-        # メモ帳での編集を消さないよう、保存直前に読み直す
+        # 設定画面での変更を消さないよう、保存直前に読み直す
         self.config = load_config()
         self.config['Analysis'].update({
             'start_date': start_date.isoformat(),
@@ -271,12 +268,5 @@ class MedicalDocsAnalyzerGUI:
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.MASTER_OPEN_ERROR_MESSAGE.format(error=e))
 
-    def open_path_settings(self) -> None:
-        PathSettingsDialog(self.root)
-
-    def open_config(self) -> None:
-        try:
-            subprocess.Popen(['notepad.exe', CONFIG_PATH])
-        except Exception as e:
-            messagebox.showerror(constants.ERROR_TITLE,
-                                 constants.CONFIG_OPEN_ERROR_MESSAGE.format(error=e))
+    def open_settings(self) -> None:
+        SettingsDialog(self.root)

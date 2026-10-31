@@ -292,17 +292,8 @@ def test_admin_user_can_use_everything(config_path: Path, root: tk.Tk, messagebo
     assert gui.result_view.notebook.tab(gui.result_view.overall_tab, 'state') == 'normal'
 
 
-def test_open_config_opens_notepad(gui: MedicalDocsAnalyzerGUI) -> None:
-    with patch('app.app_window.subprocess.Popen') as popen:
-        gui.open_config()
+def test_open_settings_opens_dialog(gui: MedicalDocsAnalyzerGUI) -> None:
+    with patch('app.app_window.SettingsDialog') as dialog:
+        gui.open_settings()
 
-    popen.assert_called_once()
-    assert popen.call_args.args[0][0] == 'notepad.exe'
-
-
-def test_open_config_shows_error(gui: MedicalDocsAnalyzerGUI, messagebox: MagicMock) -> None:
-    with patch('app.app_window.subprocess.Popen', side_effect=OSError('denied')):
-        gui.open_config()
-
-    messagebox.showerror.assert_called_once_with(
-        constants.ERROR_TITLE, constants.CONFIG_OPEN_ERROR_MESSAGE.format(error='denied'))
+    dialog.assert_called_once_with(gui.root)

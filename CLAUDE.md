@@ -6,8 +6,8 @@ Windows専用のtkinter GUIアプリ。医療文書の記録をExcelから読み
 
 ## 構成
 
-- `app/`: GUI(`MedicalDocsAnalyzerGUI`)。右側の `ResultView` が「全体」「個人」タブで表と matplotlib の図(`charts.py`)を出す。ほかに `MasterDialog`、`ImportErrorsDialog`、`PathSettingsDialog`、`constants.py`(UI文言はすべてここに定数で置く)。
-- 印刷は Excel 出力(`service_excel_writer`、openpyxl のグラフ付き・A4 横 1 枚)を Excel で開いて行う。tkinter に印刷機能がないため。
+- `app/`: GUI(`MedicalDocsAnalyzerGUI`)。右側の `ResultView` が「全体」「個人」タブで表と matplotlib の図(`charts.py`)を出す。ほかに `MasterDialog`、`ImportErrorsDialog`、`SettingsDialog`(ファイルパス・画面の大きさ・バックアップ世代数。`[Analysis]` はメイン画面とマスタと重なるので出さない)、`constants.py`(UI文言はすべてここに定数で置く)。
+- 印刷は Excel 出力(`service_excel_writer`、openpyxl のグラフ付き・A4 横 1 枚)を Excel で開いて行う。tkinter に印刷機能がないため。Excel 出力と取込エラー行の CSV 保存は `output_dir` に保存し、ファイルではなくフォルダを開く(`os.startfile`。エクスプローラーで同じフォルダが開いていれば、その窓を使う)。
 - `service/service_medical_docs_analyzer.py`: `MedicalDocsAnalyzer` が統括する。取り込みは `prepare_source_import()`(元データ xlsm)/ `prepare_legacy_import()`(旧 DB xlsx)で計画(`ImportPlan`)を作り、`apply_import()` で書く。「集計開始」は元データを確認なしで取り込んでから集計し、「Excel読込」は旧 DB を確認してから取り込む。例外は握りつぶさず GUI まで送る(`NoDataError` は専用メッセージを出す)。
 - `service/`: `service_excel_reader`(見出し名で列を探し、`Document` とエラー行 `RowError` に分ける)、`service_database`(SQLite の接続・スキーマ・文書の入れ替え)、`service_data_analyzer`(SQL で集計)、`service_backup`(起動時の日次バックアップ)、`service_excel_writer`(テンプレート出力)。
 - `utils/`: `config_manager.py`、`date_period.py`(年・期間・年の始まりの月から開始日と終了日を求める)。
