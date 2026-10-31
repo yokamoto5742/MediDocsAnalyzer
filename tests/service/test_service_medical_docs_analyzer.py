@@ -30,8 +30,7 @@ def test_split_list() -> None:
     assert split_list(' 植田, 花﨑 ,,') == ['植田', '花﨑']
 
 
-def test_import_migrates_legacy_database_then_replaces_source_range(config_path: Path,
-                                                                    make_workbook: MakeWorkbook) -> None:
+def test_source_import_replaces_range_of_legacy_documents(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     make_workbook(tmp_path / 'legacy.xlsx', [
         ['2025/03/31', 1, '既存', '証明書', '内科', '佐藤', None, '2025/04/01', '沖野'],
@@ -43,16 +42,19 @@ def test_import_migrates_legacy_database_then_replaces_source_range(config_path:
         [datetime(2025, 4, 5), 5, '田中', '紹介状', '外科', '田中', None, '025/4/6', '花﨑'],
     ])
     analyzer = MedicalDocsAnalyzer()
+    analyzer.apply_import(analyzer.prepare_legacy_import())
 
-    plan = analyzer.prepare_import()
+    plan = analyzer.prepare_source_import()
     count = analyzer.apply_import(plan)
 
     assert plan.start_date == date(2025, 4, 1)
-    assert plan.legacy is not None
     assert plan.deleted_count == 1
-    assert [error.row_number for error in plan.errors] == [4]
+    assert [(error.row_number, error.patient_id) for error in plan.errors] == [(4, '5')]
     assert count == 2
     assert database_rows(config_path) == [('2025-03-31', '沖野'), ('2025-04-03', '花﨑')]
+    with open_database(str(tmp_path / 'database.db')) as connection:
+        assert connection.execute(
+            'SELECT patient_id FROM documents ORDER BY received_date').fetchall() == [('1',), ('4',)]
 
 
 def test_import_keeps_documents_newer_than_source(config_path: Path, make_workbook: MakeWorkbook) -> None:
@@ -66,31 +68,28 @@ def test_import_keeps_documents_newer_than_source(config_path: Path, make_workbo
         ['2025/04/02', 3, '下書き', '証明書', '内科', '佐藤', None, None, None],
     ])
     analyzer = MedicalDocsAnalyzer()
+    analyzer.apply_import(analyzer.prepare_legacy_import())
 
-    plan = analyzer.prepare_import()
+    plan = analyzer.prepare_source_import()
     analyzer.apply_import(plan)
 
     assert (plan.start_date, plan.end_date, plan.deleted_count) == (date(2025, 4, 1), date(2025, 4, 2), 1)
     assert database_rows(config_path) == [('2025-04-01', '植田'), ('2025-06-30', '沖野')]
 
 
-def test_import_skips_legacy_database_when_database_has_documents(config_path: Path,
-                                                                  make_workbook: MakeWorkbook) -> None:
+def test_source_import_does_not_read_legacy_database_into_empty_database(config_path: Path,
+                                                                        make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     make_workbook(tmp_path / 'source.xlsx', [
         ['2025/04/03', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/04', '植田'],
     ])
-    analyzer = MedicalDocsAnalyzer()
-    analyzer.apply_import(analyzer.prepare_import())
     make_workbook(tmp_path / 'legacy.xlsx', [
         ['2025/03/31', 1, '既存', '証明書', '内科', '佐藤', None, '2025/04/01', '沖野'],
     ])
+    analyzer = MedicalDocsAnalyzer()
 
-    plan = analyzer.prepare_import()
-
-    assert plan.legacy is None
-    assert plan.deleted_count == 1
-    assert analyzer.apply_import(plan) == 1
+    assert analyzer.apply_import(analyzer.prepare_source_import()) == 1
+    assert database_rows(config_path) == [('2025-04-03', '植田')]
 
 
 def test_prepare_import_rejects_staff_not_in_master(config_path: Path, make_workbook: MakeWorkbook) -> None:
@@ -98,7 +97,7 @@ def test_prepare_import_rejects_staff_not_in_master(config_path: Path, make_work
         ['2025/04/03', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/04', '未登録'],
     ])
 
-    plan = MedicalDocsAnalyzer().prepare_import()
+    plan = MedicalDocsAnalyzer().prepare_source_import()
 
     assert [error.reason for error in plan.errors] == ['担当者名がマスタに登録されていません']
     assert plan.source.documents == []
@@ -108,7 +107,7 @@ def test_prepare_import_raises_when_source_is_empty(config_path: Path, make_work
     make_workbook(config_path.parent / 'source.xlsx', [])
 
     with pytest.raises(NoDataError):
-        MedicalDocsAnalyzer().prepare_import()
+        MedicalDocsAnalyzer().prepare_source_import()
 
 
 def test_backup_database(config_path: Path) -> None:
@@ -130,7 +129,7 @@ def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook, startfile:
         ['2025/05/10', 3, '鈴木', '紹介状', '外科', '田中', None, '2025/05/11', '花﨑'],
     ])
     analyzer = MedicalDocsAnalyzer()
-    analyzer.apply_import(analyzer.prepare_import())
+    analyzer.apply_import(analyzer.prepare_source_import())
 
     output_path = analyzer.run_analysis(date(2025, 4, 1), date(2025, 6, 30))
 
@@ -154,7 +153,7 @@ def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkboo
         ['2025/04/01', 1, '山田', '診断書', '眼科', '佐藤', None, '2025/04/02', '植田'],
     ])
     analyzer = MedicalDocsAnalyzer()
-    analyzer.apply_import(analyzer.prepare_import())
+    analyzer.apply_import(analyzer.prepare_source_import())
     ueda, okino, _ = analyzer.list_staff()
     ueda.active = False
     okino.active = False
@@ -180,7 +179,7 @@ def test_export_staff(config_path: Path, make_workbook: MakeWorkbook, startfile:
         ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
     ])
     analyzer = MedicalDocsAnalyzer()
-    analyzer.apply_import(analyzer.prepare_import())
+    analyzer.apply_import(analyzer.prepare_source_import())
 
     output_path = analyzer.export_staff('花﨑', date(2025, 4, 1), date(2025, 4, 30))
 
@@ -197,4 +196,4 @@ def test_empty_workbook_without_headers_is_rejected(config_path: Path) -> None:
     Workbook().save(config_path.parent / 'source.xlsx')
 
     with pytest.raises(ValueError):
-        MedicalDocsAnalyzer().prepare_import()
+        MedicalDocsAnalyzer().prepare_source_import()

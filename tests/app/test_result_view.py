@@ -43,6 +43,20 @@ def test_show_overall_and_staff(root: tk.Tk) -> None:
     assert '平均 2.0件' in view.staff_total_label.cget('text')
 
 
+def test_sort_overall_toggles_order_and_keeps_total_last(root: tk.Tk) -> None:
+    view = ResultView(root, MagicMock(), MagicMock(), MagicMock())
+    view.show_overall(SUMMARY)
+
+    view.sort_overall(3)
+    assert [row[0] for row in tree_values(view.overall_tree)] == ['花﨑', '植田', '合計']
+
+    view.sort_overall(3)
+    assert [row[0] for row in tree_values(view.overall_tree)] == ['植田', '花﨑', '合計']
+
+    view.sort_overall(1)
+    assert [row[0] for row in tree_values(view.overall_tree)] == ['植田', '花﨑', '合計']
+
+
 def test_set_staff_names_keeps_selection(root: tk.Tk) -> None:
     view = ResultView(root, MagicMock(), MagicMock(), MagicMock())
     view.staff_var.set('花﨑')

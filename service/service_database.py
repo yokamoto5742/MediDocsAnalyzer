@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS documents (
     document_name TEXT NOT NULL,
     department TEXT NOT NULL,
     doctor_name TEXT NOT NULL,
-    staff_name TEXT NOT NULL
+    staff_name TEXT NOT NULL,
+    patient_id TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_documents_received_date ON documents (received_date);
 CREATE TABLE IF NOT EXISTS staff (
@@ -43,7 +44,15 @@ def connect(database_path: str) -> sqlite3.Connection:
     # 共有フォルダ上では WAL が使えないため、ロールバックジャーナルにする
     connection.execute('PRAGMA journal_mode=DELETE')
     connection.executescript(SCHEMA)
+    _add_patient_id_column(connection)
     return connection
+
+
+def _add_patient_id_column(connection: sqlite3.Connection) -> None:
+    """患者IDの列がない古い DB に列を足す"""
+    columns = [row[1] for row in connection.execute('PRAGMA table_info(documents)')]
+    if 'patient_id' not in columns:
+        connection.execute("ALTER TABLE documents ADD COLUMN patient_id TEXT NOT NULL DEFAULT ''")
 
 
 @contextmanager
@@ -72,7 +81,8 @@ def replace_documents_between(connection: sqlite3.Connection, start_date: date, 
     connection.execute('DELETE FROM documents WHERE received_date BETWEEN ? AND ?',
                        (start_date.isoformat(), end_date.isoformat()))
     connection.executemany(
-        'INSERT INTO documents (received_date, requested_date, document_name, department, doctor_name, staff_name)'
-        ' VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO documents (received_date, requested_date, document_name, department, doctor_name, staff_name,'
+        ' patient_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [(document.received_date.isoformat(), document.requested_date.isoformat(), document.document_name,
-          document.department, document.doctor_name, document.staff_name) for document in documents])
+          document.department, document.doctor_name, document.staff_name, document.patient_id)
+         for document in documents])

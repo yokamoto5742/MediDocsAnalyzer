@@ -80,10 +80,10 @@ def test_apply_period_ignores_invalid_year(gui: MedicalDocsAnalyzerGUI) -> None:
     assert gui.start_date.get() == '2025/04/01'
 
 
-def make_plan(errors: list[RowError], legacy: SourceData | None = None) -> ImportPlan:
+def make_plan(errors: list[RowError]) -> ImportPlan:
     source = SourceData(documents=[Document(date(2025, 4, 1), date(2025, 4, 2), '診断書', '内科', '佐藤', '植田')],
                         errors=errors, first_received_date=date(2025, 4, 1), last_received_date=date(2025, 4, 30))
-    return ImportPlan(source, legacy, deleted_count=3)
+    return ImportPlan(source, deleted_count=3)
 
 
 def test_init_backs_up_database(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
@@ -99,14 +99,14 @@ def test_init_shows_backup_error(config_path: Path, root: tk.Tk, messagebox: Mag
         constants.ERROR_TITLE, constants.BACKUP_ERROR_MESSAGE.format(error='offline'))
 
 
-def test_load_data_shows_completion(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                    messagebox: MagicMock) -> None:
-    analyzer.prepare_import.return_value = make_plan([])
+def test_load_excel_shows_completion(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                     messagebox: MagicMock) -> None:
+    analyzer.prepare_legacy_import.return_value = make_plan([])
     analyzer.apply_import.return_value = 12
     messagebox.askyesno.return_value = True
 
     with patch('app.app_window.ImportErrorsDialog') as dialog:
-        gui.load_data()
+        gui.load_excel()
 
     assert messagebox.askyesno.call_args.args[1] == constants.IMPORT_CONFIRM_MESSAGE.format(
         start_date=date(2025, 4, 1), end_date=date(2025, 4, 30), deleted=3, inserted=1, errors=0)
@@ -115,24 +115,23 @@ def test_load_data_shows_completion(gui: MedicalDocsAnalyzerGUI, analyzer: Magic
     dialog.assert_not_called()
 
 
-def test_load_data_shows_error_rows(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                    messagebox: MagicMock) -> None:
-    errors = [RowError('source.xlsx', 5, '預り日が空です', '')]
-    analyzer.prepare_import.return_value = make_plan(errors, legacy=SourceData(documents=[]))
+def test_load_excel_shows_error_rows(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                     messagebox: MagicMock) -> None:
+    errors = [RowError('legacy.xlsx', 5, '123', '預り日が空です', '')]
+    analyzer.prepare_legacy_import.return_value = make_plan(errors)
     messagebox.askyesno.return_value = True
 
     with patch('app.app_window.ImportErrorsDialog') as dialog:
-        gui.load_data()
+        gui.load_excel()
 
-    assert messagebox.askyesno.call_args.args[1].startswith(constants.LEGACY_IMPORT_MESSAGE.format(count=0))
     dialog.assert_called_once_with(gui.root, errors)
 
 
-def test_load_data_cancelled(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:
-    analyzer.prepare_import.return_value = make_plan([])
+def test_load_excel_cancelled(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:
+    analyzer.prepare_legacy_import.return_value = make_plan([])
     messagebox.askyesno.return_value = False
 
-    gui.load_data()
+    gui.load_excel()
 
     analyzer.apply_import.assert_not_called()
     messagebox.showinfo.assert_not_called()
@@ -142,11 +141,11 @@ def test_load_data_cancelled(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, m
     (NoDataError(), constants.NO_SOURCE_DATA_MESSAGE),
     (FileNotFoundError('missing'), constants.LOAD_ERROR_MESSAGE.format(error='missing')),
 ])
-def test_load_data_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock,
-                               error: Exception, expected_message: str) -> None:
-    analyzer.prepare_import.side_effect = error
+def test_load_excel_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock,
+                                error: Exception, expected_message: str) -> None:
+    analyzer.prepare_legacy_import.side_effect = error
 
-    gui.load_data()
+    gui.load_excel()
 
     messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
 
@@ -163,13 +162,19 @@ def make_staff_counts(name: str) -> StaffCounts:
 
 def test_start_analysis_shows_results_and_saves_settings(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
                                                          messagebox: MagicMock) -> None:
+    plan = make_plan([])
+    analyzer.prepare_source_import.return_value = plan
     analyzer.overall_summary.return_value = make_summary()
     analyzer.staff_summary.return_value = make_staff_counts('植田')
     set_dates(gui, '2025/10/01', '2025/12/31')
     gui.year_start_month_var.set(1)
 
-    gui.start_analysis()
+    with patch('app.app_window.ImportErrorsDialog') as dialog:
+        gui.start_analysis()
 
+    analyzer.apply_import.assert_called_once_with(plan)
+    messagebox.askyesno.assert_not_called()
+    dialog.assert_not_called()
     analyzer.overall_summary.assert_called_once_with(date(2025, 10, 1), date(2025, 12, 31))
     analyzer.staff_summary.assert_called_once_with('植田', date(2025, 10, 1), date(2025, 12, 31))
     assert gui.period == (date(2025, 10, 1), date(2025, 12, 31))
@@ -200,12 +205,41 @@ def test_start_analysis_rejects_invalid_dates(gui: MedicalDocsAnalyzerGUI, analy
 ])
 def test_start_analysis_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock,
                                     error: Exception, expected_message: str) -> None:
+    analyzer.prepare_source_import.return_value = make_plan([])
     analyzer.overall_summary.side_effect = error
 
     gui.start_analysis()
 
     messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
     assert gui.period is None
+
+
+def test_start_analysis_shows_import_error_rows_then_analyzes(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
+    errors = [RowError('source.xlsm', 5, '123', '預り日が空です', '')]
+    analyzer.prepare_source_import.return_value = make_plan(errors)
+    analyzer.overall_summary.return_value = make_summary()
+    analyzer.staff_summary.return_value = make_staff_counts('植田')
+
+    with patch('app.app_window.ImportErrorsDialog') as dialog:
+        gui.start_analysis()
+
+    dialog.assert_called_once_with(gui.root, errors)
+    analyzer.overall_summary.assert_called_once()
+
+
+@pytest.mark.parametrize(('error', 'expected_message'), [
+    (NoDataError(), constants.NO_SOURCE_DATA_MESSAGE),
+    (FileNotFoundError('missing'), constants.LOAD_ERROR_MESSAGE.format(error='missing')),
+])
+def test_start_analysis_stops_when_import_fails(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                                messagebox: MagicMock, error: Exception,
+                                                expected_message: str) -> None:
+    analyzer.prepare_source_import.side_effect = error
+
+    gui.start_analysis()
+
+    messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
+    analyzer.overall_summary.assert_not_called()
 
 
 def test_export_requires_analysis(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:

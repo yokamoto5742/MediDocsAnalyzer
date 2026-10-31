@@ -28,7 +28,6 @@ def split_list(text: str) -> list[str]:
 class ImportPlan:
     """取り込みの内容。確認のため、DB に書く前に画面へ見せる"""
     source: SourceData
-    legacy: SourceData | None
     deleted_count: int
 
     @property
@@ -43,8 +42,7 @@ class ImportPlan:
 
     @property
     def errors(self) -> list[RowError]:
-        legacy_errors = self.legacy.errors if self.legacy else []
-        return legacy_errors + self.source.errors
+        return self.source.errors
 
 
 @dataclass
@@ -67,38 +65,34 @@ class MedicalDocsAnalyzer:
                 connection, split_list(config.get('Analysis', 'ordered_names', fallback='')), departments)
             yield connection
 
-    def prepare_import(self) -> ImportPlan:
-        """元データを読み、元データの預り日の範囲(最も古い日〜新しい日)にある DB の文書を入れ替える計画を返す。
+    def prepare_source_import(self) -> ImportPlan:
+        """元データ(xlsm)を取り込む計画を返す"""
+        return self._prepare_import(load_config()['PATHS']['source_file_path'])
 
-        元データが古いコピーでも、それより新しい DB の文書は消さない。
-        DB が空で旧 DB(xlsx)があれば、先に旧 DB の文書を取り込む計画にする。
+    def prepare_legacy_import(self) -> ImportPlan:
+        """旧 DB(xlsx)を取り込む計画を返す"""
+        return self._prepare_import(load_config()['PATHS']['legacy_database_path'])
+
+    def _prepare_import(self, file_path: str) -> ImportPlan:
+        """file_path を読み、その預り日の範囲(最も古い日〜新しい日)にある DB の文書を入れ替える計画を返す。
+
+        読んだファイルが古いコピーでも、それより新しい DB の文書は消さない。
         """
-        paths_config = load_config()['PATHS']
         with self._open_database() as connection:
             known_staff = {staff.name for staff in service_master.list_staff(connection)}
-            is_empty = count_all_documents(connection) == 0
 
-        source = read_documents(paths_config['source_file_path'], known_staff)
+        source = read_documents(file_path, known_staff)
         if source.first_received_date is None or source.last_received_date is None:
             raise NoDataError
-        start_date, end_date = source.first_received_date, source.last_received_date
 
         with self._open_database() as connection:
-            deleted_count = count_documents_between(connection, start_date, end_date)
-
-        legacy = None
-        legacy_path = paths_config.get('legacy_database_path', '')
-        if is_empty and legacy_path and Path(legacy_path).exists():
-            legacy = read_documents(legacy_path, known_staff)
-            deleted_count = sum(start_date <= document.received_date <= end_date for document in legacy.documents)
-        return ImportPlan(source, legacy, deleted_count)
+            deleted_count = count_documents_between(connection, source.first_received_date,
+                                                    source.last_received_date)
+        return ImportPlan(source, deleted_count)
 
     def apply_import(self, plan: ImportPlan) -> int:
         """計画どおりに DB を書き換え、DB の件数を返す"""
         with self._open_database() as connection:
-            if plan.legacy is not None and plan.legacy.first_received_date and plan.legacy.last_received_date:
-                replace_documents_between(connection, plan.legacy.first_received_date,
-                                          plan.legacy.last_received_date, plan.legacy.documents)
             replace_documents_between(connection, plan.start_date, plan.end_date, plan.source.documents)
             return count_all_documents(connection)
 

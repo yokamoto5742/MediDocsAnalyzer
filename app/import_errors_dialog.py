@@ -8,8 +8,8 @@ from service.service_excel_reader import RowError
 CSV_FILE_TYPES = [(constants.CSV_FILE_TYPE_LABEL, '*.csv')]
 
 
-def error_rows(errors: list[RowError]) -> list[tuple[str, int, str, str]]:
-    return [(error.file_name, error.row_number, error.reason, error.row_text) for error in errors]
+def error_rows(errors: list[RowError]) -> list[tuple[str, int, str, str, str]]:
+    return [(error.file_name, error.row_number, error.patient_id, error.reason, error.row_text) for error in errors]
 
 
 class ImportErrorsDialog:
@@ -30,7 +30,7 @@ class ImportErrorsDialog:
 
         ttk.Label(frame, text=constants.IMPORT_ERRORS_HEADING).grid(row=0, column=0, sticky=tk.W, pady=5)
         self.tree = ttk.Treeview(frame, columns=constants.ERROR_COLUMNS, show='headings', height=15)
-        for column, width in zip(constants.ERROR_COLUMNS, (180, 50, 220, 500)):
+        for column, width in zip(constants.ERROR_COLUMNS, (180, 50, 100, 220, 500)):
             self.tree.heading(column, text=column)
             self.tree.column(column, width=width)
         for row in error_rows(errors):

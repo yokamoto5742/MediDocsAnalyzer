@@ -1,6 +1,7 @@
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
+from typing import cast
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
@@ -57,6 +58,11 @@ class ResultView:
                  on_export_staff: Callable[[], None], on_staff_selected: Callable[[], None]) -> None:
         # 職員としてログインしたときの本人の氏名。None なら全員分を見られる
         self.restricted_staff: str | None = None
+        # 全体の表の担当者の行と合計行。並べ替えても合計行は最後に置く
+        self.overall_staff_rows: list[list[object]] = []
+        self.overall_total_row: list[object] = []
+        # 並べ替えている列の番号と降順かどうか。None なら表示順のまま
+        self.overall_sort: tuple[int, bool] | None = None
         self.notebook = ttk.Notebook(parent)
         self.overall_tab = ttk.Frame(self.notebook, padding="5")
         self.staff_tab = ttk.Frame(self.notebook, padding="5")
@@ -103,8 +109,23 @@ class ResultView:
         counts = summary.counts
         self.overall_title.configure(text=constants.OVERALL_TITLE_FORMAT.format(
             first=counts.first_date, last=counts.last_date, total=counts.total))
-        fill_tree(self.overall_tree, [constants.STAFF_NAME_HEADER, *summary.departments], overall_rows(summary))
+        columns = [constants.STAFF_NAME_HEADER, *summary.departments]
+        rows = overall_rows(summary)
+        self.overall_staff_rows, self.overall_total_row = rows[:-1], rows[-1]
+        self.overall_sort = None
+        fill_tree(self.overall_tree, columns, rows)
+        for index, column in enumerate(columns[1:], start=1):
+            self.overall_tree.heading(column, command=lambda i=index: self.sort_overall(i))
         self.overall_chart.show(overall_figure(summary))
+
+    def sort_overall(self, column_index: int) -> None:
+        """件数の列で並べ替える。同じ列をもう一度押すと昇順と降順を切り替える。合計行はいつも最後"""
+        descending = self.overall_sort != (column_index, True)
+        self.overall_sort = (column_index, descending)
+        rows = sorted(self.overall_staff_rows, key=lambda row: cast(int, row[column_index]), reverse=descending)
+        self.overall_tree.delete(*self.overall_tree.get_children())
+        for row in [*rows, self.overall_total_row]:
+            self.overall_tree.insert('', tk.END, values=row)
 
     def restrict_to_staff(self, staff_name: str) -> None:
         """全体タブを隠し、個人タブを staff_name だけにする"""

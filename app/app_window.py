@@ -53,7 +53,7 @@ class MedicalDocsAnalyzerGUI:
         self._apply_permissions()
 
     def _apply_permissions(self) -> None:
-        """職員は取り込み・マスタ・設定を使えず、自分の個人集計だけを見られる"""
+        """職員は Excel読込・マスタ・設定を使えず、自分の個人集計だけを見られる"""
         if self.user is None or self.user.role == ADMIN_ROLE:
             return
         for button in self.admin_buttons:
@@ -124,14 +124,14 @@ class MedicalDocsAnalyzerGUI:
         self.end_date.set_date(end_date)
 
     def _setup_buttons(self, parent: ttk.Frame) -> None:
-        load_button = ttk.Button(parent, text="データ読込", command=self.load_data)
-        load_button.grid(row=2, column=0, columnspan=2, pady=10)
         ttk.Button(parent, text="集計開始", command=self.start_analysis).grid(
-            row=3, column=0, columnspan=2, pady=10)
-        master_button = ttk.Button(parent, text="マスタ", command=self.open_master)
-        master_button.grid(row=4, column=0, columnspan=2, pady=5)
+            row=2, column=0, columnspan=2, pady=10)
+        master_button = ttk.Button(parent, text=constants.MASTER_BUTTON_LABEL, command=self.open_master)
+        master_button.grid(row=3, column=0, columnspan=2, pady=5)
         path_button = ttk.Button(parent, text="ファイルパス", command=self.open_path_settings)
-        path_button.grid(row=5, column=0, columnspan=2, pady=5)
+        path_button.grid(row=4, column=0, columnspan=2, pady=5)
+        load_button = ttk.Button(parent, text=constants.EXCEL_IMPORT_BUTTON_LABEL, command=self.load_excel)
+        load_button.grid(row=5, column=0, columnspan=2, pady=5)
         config_button = ttk.Button(parent, text="設定", command=self.open_config)
         config_button.grid(row=6, column=0, columnspan=2, pady=5)
         if self.user is not None:
@@ -147,9 +147,10 @@ class MedicalDocsAnalyzerGUI:
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.BACKUP_ERROR_MESSAGE.format(error=e))
 
-    def load_data(self) -> None:
+    def load_excel(self) -> None:
+        """旧 DB(xlsx)を確認してから取り込む"""
         try:
-            plan = self.analyzer.prepare_import()
+            plan = self.analyzer.prepare_legacy_import()
             if not messagebox.askyesno(constants.CONFIRM_TITLE, self._import_confirm_message(plan)):
                 return
             count = self.analyzer.apply_import(plan)
@@ -164,12 +165,24 @@ class MedicalDocsAnalyzerGUI:
 
     @staticmethod
     def _import_confirm_message(plan: ImportPlan) -> str:
-        message = constants.IMPORT_CONFIRM_MESSAGE.format(
+        return constants.IMPORT_CONFIRM_MESSAGE.format(
             start_date=plan.start_date, end_date=plan.end_date, deleted=plan.deleted_count,
             inserted=len(plan.source.documents), errors=len(plan.errors))
-        if plan.legacy is not None:
-            message = constants.LEGACY_IMPORT_MESSAGE.format(count=len(plan.legacy.documents)) + message
-        return message
+
+    def _import_source(self) -> bool:
+        """元データ(xlsm)を確認なしで取り込む。取り込めたら True"""
+        try:
+            plan = self.analyzer.prepare_source_import()
+            self.analyzer.apply_import(plan)
+        except NoDataError:
+            messagebox.showerror(constants.ERROR_TITLE, constants.NO_SOURCE_DATA_MESSAGE)
+            return False
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.LOAD_ERROR_MESSAGE.format(error=e))
+            return False
+        if plan.errors:
+            ImportErrorsDialog(self.root, plan.errors)
+        return True
 
     def start_analysis(self) -> None:
         # get_date() は手入力がフォーカスを外れるまで反映されないため、入力欄の文字列を読む
@@ -182,6 +195,9 @@ class MedicalDocsAnalyzerGUI:
 
         if start_date > end_date:
             messagebox.showerror(constants.ERROR_TITLE, constants.START_AFTER_END_MESSAGE)
+            return
+
+        if not self._import_source():
             return
 
         try:

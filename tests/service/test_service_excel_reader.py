@@ -35,7 +35,7 @@ def test_read_documents(tmp_path: Path, make_workbook: MakeWorkbook) -> None:
 
     source = read_documents(str(path))
 
-    assert source.documents == [Document(date(2025, 4, 3), date(2025, 4, 4), '診断書', '内科', '佐藤', '花﨑')]
+    assert source.documents == [Document(date(2025, 4, 3), date(2025, 4, 4), '診断書', '内科', '佐藤', '花﨑', '123')]
     assert source.errors == []
     assert source.first_received_date == date(2025, 4, 3)
 
@@ -73,6 +73,7 @@ def test_read_documents_reports_error_rows(tmp_path: Path, make_workbook: MakeWo
         (5, '担当者名がマスタに登録されていません'),
     ]
     assert source.errors[0].file_name == 'source.xlsx'
+    assert source.errors[0].patient_id == '1'
     assert source.errors[0].row_text == '2025/04/01 | 025/3/28 | 診断書 | 内科 | 佐藤 | 花﨑'
     assert len(source.documents) == 1
     assert source.first_received_date == date(2025, 4, 1)

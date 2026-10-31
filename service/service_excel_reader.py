@@ -10,8 +10,9 @@ DATE_PATTERN = re.compile(r'\d{4}/\d{1,2}/\d{1,2}')
 RECEIVED_DATE_COLUMN = '預り日'
 REQUESTED_DATE_COLUMN = '医師依頼日'
 STAFF_COLUMN = '担当者名'
+PATIENT_ID_COLUMN = '患者ID'
 TEXT_COLUMNS = ('文書名', '診療科', '医師名', STAFF_COLUMN)
-REQUIRED_COLUMNS = (RECEIVED_DATE_COLUMN, REQUESTED_DATE_COLUMN, *TEXT_COLUMNS)
+REQUIRED_COLUMNS = (RECEIVED_DATE_COLUMN, REQUESTED_DATE_COLUMN, *TEXT_COLUMNS, PATIENT_ID_COLUMN)
 
 
 class NoDataError(Exception):
@@ -26,12 +27,14 @@ class Document:
     department: str
     doctor_name: str
     staff_name: str
+    patient_id: str = ''
 
 
 @dataclass(frozen=True)
 class RowError:
     file_name: str
     row_number: int
+    patient_id: str
     reason: str
     row_text: str
 
@@ -124,8 +127,8 @@ def _add_row(source: SourceData, cells: dict[str, object], row_number: int, file
 
     reason = row_error_reason(cells, known_staff)
     if reason is not None:
-        row_text = ' | '.join(to_text(value) for value in cells.values())
-        source.errors.append(RowError(file_name, row_number, reason, row_text))
+        row_text = ' | '.join(to_text(value) for column, value in cells.items() if column != PATIENT_ID_COLUMN)
+        source.errors.append(RowError(file_name, row_number, to_text(cells[PATIENT_ID_COLUMN]), reason, row_text))
         return
 
     requested = to_date(cells[REQUESTED_DATE_COLUMN])
@@ -133,4 +136,5 @@ def _add_row(source: SourceData, cells: dict[str, object], row_number: int, file
     if received is None or requested is None or not staff:
         return
     source.documents.append(Document(received, requested, to_text(cells['文書名']),
-                                     to_text(cells['診療科']), to_text(cells['医師名']), staff))
+                                     to_text(cells['診療科']), to_text(cells['医師名']), staff,
+                                     to_text(cells[PATIENT_ID_COLUMN])))
