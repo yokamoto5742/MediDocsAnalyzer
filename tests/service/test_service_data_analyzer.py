@@ -59,6 +59,9 @@ def test_count_staff_documents(connection: sqlite3.Connection) -> None:
     assert counts.by_document == [('紹介状', 2)]
     assert counts.by_month == [('2025/08', 3), ('2025/09', 0), ('2025/10', 1)]
 
+    all_documents = count_staff_documents(connection, '植田', date(2025, 8, 1), date(2025, 10, 31))
+    assert all_documents.by_document == [('紹介状', 2), ('診断書', 2)]
+
 
 def test_count_staff_documents_without_data(connection: sqlite3.Connection) -> None:
     counts = count_staff_documents(connection, '植田', date(2026, 1, 1), date(2026, 1, 31), document_limit=10)

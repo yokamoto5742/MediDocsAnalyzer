@@ -27,6 +27,8 @@ class SettingsDialog:
         self.dialog.title(constants.SETTINGS_TITLE)
         self.dialog.transient(parent)
         self.dialog.grab_set()
+        # 保存して閉じたら True。メイン画面が概要を読み直すかどうかに使う
+        self.saved = False
 
         config = load_config()
         path_rows: list[tuple[str, str, Callable[[str], None]]] = [
@@ -50,10 +52,10 @@ class SettingsDialog:
 
         number_frame = ttk.LabelFrame(frame, text=constants.OTHER_SETTINGS_HEADING, padding="5")
         number_frame.grid(row=1, column=0, sticky=tk.EW, pady=(10, 0))
-        for row, (_, key, label, minimum, maximum) in enumerate(NUMBER_SETTINGS):
+        for row, (_, key, label, _, _) in enumerate(NUMBER_SETTINGS):
             ttk.Label(number_frame, text=label).grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
-            ttk.Spinbox(number_frame, from_=minimum, to=maximum, width=8,
-                        textvariable=self.number_vars[key]).grid(row=row, column=1, sticky=tk.W, padx=5, pady=5)
+            ttk.Entry(number_frame, width=8, textvariable=self.number_vars[key]).grid(
+                row=row, column=1, sticky=tk.W, padx=5, pady=5)
         ttk.Label(number_frame, text=constants.WINDOW_SIZE_NOTE).grid(
             row=len(NUMBER_SETTINGS), column=0, columnspan=2, sticky=tk.W, padx=5)
 
@@ -111,4 +113,5 @@ class SettingsDialog:
                 config.add_section(section)
             config[section][key] = str(int(self.number_vars[key].get().strip()))
         save_config(config)
+        self.saved = True
         self.dialog.destroy()

@@ -69,17 +69,18 @@ def months_between(start_date: date, end_date: date) -> list[str]:
 
 
 def count_staff_documents(connection: sqlite3.Connection, staff_name: str, start_date: date, end_date: date,
-                          document_limit: int) -> StaffCounts:
-    """1 人の担当者について、診療科別・文書名別(多い順に document_limit 件)・月別の件数を数える"""
+                          document_limit: int | None = None) -> StaffCounts:
+    """1 人の担当者について、診療科別・文書名別(多い順。document_limit が None なら全件)・月別の件数を数える"""
     parameters = (staff_name, *period_parameters(start_date, end_date))
     condition = f'staff_name = ? AND {PERIOD_CONDITION}'
     by_department = connection.execute(
         f'SELECT department, COUNT(*) AS count FROM documents WHERE {condition}'
         ' GROUP BY department ORDER BY count DESC, department', parameters).fetchall()
+    # SQLite の LIMIT -1 は件数の上限なし
     by_document = connection.execute(
         f'SELECT document_name, COUNT(*) AS count FROM documents WHERE {condition}'
         ' GROUP BY document_name ORDER BY count DESC, document_name LIMIT ?',
-        (*parameters, document_limit)).fetchall()
+        (*parameters, -1 if document_limit is None else document_limit)).fetchall()
     month_counts = dict(connection.execute(
         f"SELECT strftime('%Y/%m', received_date), COUNT(*) FROM documents WHERE {condition}"
         ' GROUP BY 1', parameters).fetchall())

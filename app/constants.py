@@ -17,11 +17,10 @@ ERROR_CSV_FILE_NAME_FORMAT = "取込エラー行_{now:%Y%m%d_%H%M%S}.csv"
 CSV_SAVE_ERROR_MESSAGE = "CSV保存中にエラーが発生しました：\n{error}"
 OVERVIEW_TAB_LABEL = "概要"
 OVERVIEW_TITLE_FORMAT = ("預り日 {start:%Y/%m/%d}〜{end:%Y/%m/%d}　対象 {total}件"
-                         "(担当者未定 {unassigned}件 / 医師依頼日未入力 {unrequested}件)")
+                         "(未着手 {not_started}件 / 未完了 {incomplete}件 / 担当不明 {unassigned}件)")
 OVERVIEW_ERROR_FORMAT = "元データを読めませんでした：{error}"
-OVERVIEW_COLUMNS = ("預り日", "患者ID", "文書名", "診療科", "医師名", "担当者名", "医師依頼日", "空欄の項目")
-STAFF_BLANK_LABEL = "担当者名"
-REQUESTED_BLANK_LABEL = "医師依頼日"
+OVERVIEW_DEPARTMENT_COLUMNS = ("診療科", "未着手", "未完了", "担当不明", "合計")
+OVERVIEW_COLUMNS = ("預り日", "患者ID", "文書名", "診療科", "医師名", "担当者名", "医師依頼日", "現在の状態")
 PENDING_DAYS_LABEL = "概要で確認する日数"
 OVERALL_TAB_LABEL = "全体"
 STAFF_SUMMARY_TAB_LABEL = "個人"
@@ -31,7 +30,7 @@ STAFF_TOTAL_FORMAT = "合計 {total}件　(担当者1人あたりの平均 {aver
 STAFF_NAME_HEADER = "氏名"
 TOTAL_ROW_LABEL = "合計"
 STAFF_DEPARTMENT_COLUMNS = ("診療科", "件数")
-STAFF_DOCUMENT_COLUMNS = ("文書名(上位10件)", "件数")
+STAFF_DOCUMENT_COLUMNS = ("文書名", "件数")
 EXPORT_BUTTON_LABEL = "Excel出力"
 NOT_ANALYZED_ERROR_MESSAGE = "先に「集計開始」で集計してください。"
 EXPORT_ERROR_MESSAGE = "Excel出力中にエラーが発生しました：\n{error}"

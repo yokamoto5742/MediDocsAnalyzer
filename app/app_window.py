@@ -38,6 +38,7 @@ class MedicalDocsAnalyzerGUI:
         self._setup_gui()
         self.backup_database()
         self.refresh_overview()
+        self.analyze_saved_period()
 
     def _setup_gui(self) -> None:
         self.root.columnconfigure(1, weight=1)
@@ -225,6 +226,11 @@ class MedicalDocsAnalyzerGUI:
         self.result_view.set_staff_names(summary.staff_members)
         self.show_staff_summary()
 
+    def analyze_saved_period(self) -> None:
+        """前回集計した期間が設定に残っていれば、起動時に「集計開始」と同じく取り込んでから集計する"""
+        if self.config.has_option('Analysis', 'start_date') and self.config.has_option('Analysis', 'end_date'):
+            self.start_analysis()
+
     def show_staff_summary(self) -> None:
         staff_name = self.result_view.staff_var.get()
         if self.period is None or not staff_name:
@@ -281,4 +287,8 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.MASTER_OPEN_ERROR_MESSAGE.format(error=e))
 
     def open_settings(self) -> None:
-        SettingsDialog(self.root)
+        """保存したら、概要の日数や元データのパスの変更をすぐ反映する"""
+        dialog = SettingsDialog(self.root)
+        self.root.wait_window(dialog.dialog)
+        if dialog.saved:
+            self.refresh_overview()

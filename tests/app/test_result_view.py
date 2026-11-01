@@ -43,15 +43,20 @@ def test_show_overview(root: tk.Tk) -> None:
     overview = Overview(date(2026, 10, 25), date(2026, 10, 31), [
         Draft(date(2026, 10, 31), None, '診断書', '内科', '佐藤', '', '123'),
         Draft(date(2026, 10, 30), date(2026, 10, 31), '紹介状', '外科', '田中', '', '456'),
+        Draft(date(2026, 10, 30), None, '意見書', '外科', '田中', '植田', '789'),
+        Draft(date(2026, 10, 29), None, '紹介状', '外科', '田中', '', '012'),
     ])
 
     view.show_overview(overview)
 
     assert view.overview_title.cget('text') == (
-        '預り日 2026/10/25〜2026/10/31　対象 2件(担当者未定 2件 / 医師依頼日未入力 1件)')
+        '預り日 2026/10/25〜2026/10/31　対象 4件(未着手 2件 / 未完了 1件 / 担当不明 1件)')
+    assert tree_values(view.overview_department_tree) == [('外科', '1', '1', '1', '3'), ('内科', '1', '0', '0', '1')]
     assert tree_values(view.overview_tree) == [
-        ('2026/10/31', '123', '診断書', '内科', '佐藤', '', '', '担当者名・医師依頼日'),
-        ('2026/10/30', '456', '紹介状', '外科', '田中', '', '2026/10/31', '担当者名'),
+        ('2026/10/31', '123', '診断書', '内科', '佐藤', '', '', '未着手'),
+        ('2026/10/30', '456', '紹介状', '外科', '田中', '', '2026/10/31', '担当不明'),
+        ('2026/10/30', '789', '意見書', '外科', '田中', '植田', '', '未完了'),
+        ('2026/10/29', '012', '紹介状', '外科', '田中', '', '', '未着手'),
     ]
 
 
@@ -64,6 +69,7 @@ def test_show_overview_error_clears_rows(root: tk.Tk) -> None:
 
     assert view.overview_title.cget('text') == constants.OVERVIEW_ERROR_FORMAT.format(error='missing')
     assert view.overview_tree.get_children() == ()
+    assert view.overview_department_tree.get_children() == ()
 
 
 def test_show_overall_and_staff(root: tk.Tk) -> None:

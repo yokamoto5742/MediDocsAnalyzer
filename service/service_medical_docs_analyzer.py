@@ -1,8 +1,10 @@
 import sqlite3
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
+from enum import StrEnum
 from pathlib import Path
 
 from service import service_auth, service_master
@@ -25,6 +27,19 @@ def split_list(text: str) -> list[str]:
     return [item.strip() for item in text.split(',') if item.strip()]
 
 
+class DraftStatus(StrEnum):
+    NOT_STARTED = '未着手'
+    INCOMPLETE = '未完了'
+    UNASSIGNED = '担当不明'
+
+
+def draft_status(draft: Draft) -> DraftStatus:
+    """下書きは担当者名か医師依頼日の少なくとも一方が空"""
+    if draft.staff_name:
+        return DraftStatus.INCOMPLETE
+    return DraftStatus.NOT_STARTED if draft.requested_date is None else DraftStatus.UNASSIGNED
+
+
 @dataclass
 class Overview:
     """預り日が start_date〜end_date の下書き(担当者名か医師依頼日が空の行)"""
@@ -33,12 +48,16 @@ class Overview:
     drafts: list[Draft]
 
     @property
-    def unassigned_count(self) -> int:
-        return sum(1 for draft in self.drafts if not draft.staff_name)
+    def status_counts(self) -> Counter[DraftStatus]:
+        return Counter(draft_status(draft) for draft in self.drafts)
 
     @property
-    def unrequested_count(self) -> int:
-        return sum(1 for draft in self.drafts if draft.requested_date is None)
+    def department_status_counts(self) -> list[tuple[str, Counter[DraftStatus]]]:
+        """診療科ごとの状態別の件数を、件数の多い順に返す"""
+        by_department: dict[str, Counter[DraftStatus]] = {}
+        for draft in self.drafts:
+            by_department.setdefault(draft.department, Counter())[draft_status(draft)] += 1
+        return sorted(by_department.items(), key=lambda item: (-item[1].total(), item[0]))
 
 
 def make_overview(drafts: list[Draft], today: date, days: int) -> Overview:
@@ -190,15 +209,17 @@ class MedicalDocsAnalyzer:
         staff_members = [staff.name for staff in staff_list if staff.active or staff.name in counted_staff]
         return OverallSummary(counts, staff_members, [TOTAL_LABEL, *(department.name for department in departments)])
 
-    def staff_summary(self, staff_name: str, start_date: date, end_date: date) -> StaffCounts:
+    def staff_summary(self, staff_name: str, start_date: date, end_date: date,
+                      document_limit: int | None = None) -> StaffCounts:
+        """画面ではスクロールで全件を見るため、文書名は既定で全件を返す"""
         with self._open_database() as connection:
-            return count_staff_documents(connection, staff_name, start_date, end_date, TOP_DOCUMENT_COUNT)
+            return count_staff_documents(connection, staff_name, start_date, end_date, document_limit)
 
     def export_staff(self, staff_name: str, start_date: date, end_date: date) -> str:
-        """1 人分の集計を Excel に保存し、保存先のパスを返す"""
+        """1 人分の集計を Excel に保存し、保存先のパスを返す。A4 1 枚に収めるため文書名は上位だけ出す"""
         output_dir = load_config()['PATHS']['output_dir']
-        return save_staff_results(self.staff_summary(staff_name, start_date, end_date), start_date, end_date,
-                                  output_dir)
+        return save_staff_results(self.staff_summary(staff_name, start_date, end_date, TOP_DOCUMENT_COUNT),
+                                  start_date, end_date, output_dir)
 
     def run_analysis(self, start_date: date, end_date: date) -> str:
         """期間内の文書を集計して Excel に保存し、保存先のパスを返す"""

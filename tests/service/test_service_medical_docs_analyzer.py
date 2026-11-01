@@ -9,7 +9,8 @@ from service import service_excel_writer
 from service.service_database import open_database
 from service.service_excel_reader import Draft, NoDataError
 from service.service_master import Department
-from service.service_medical_docs_analyzer import MedicalDocsAnalyzer, make_overview, split_list
+from service.service_medical_docs_analyzer import (TOP_DOCUMENT_COUNT, DraftStatus, MedicalDocsAnalyzer,
+                                                   draft_status, make_overview, split_list)
 from tests.service.conftest import MakeWorkbook
 from utils.config_manager import load_config, save_config
 
@@ -43,13 +44,30 @@ def test_make_overview_keeps_drafts_within_days_newest_first() -> None:
 
     assert (overview.start_date, overview.end_date) == (date(2026, 10, 25), date(2026, 10, 31))
     assert [draft.received_date for draft in overview.drafts] == [date(2026, 10, 31), date(2026, 10, 25)]
-    assert (overview.unassigned_count, overview.unrequested_count) == (1, 1)
 
 
-def test_make_overview_counts_row_with_both_blank_in_both() -> None:
-    overview = make_overview([make_draft(date(2026, 10, 31))], date(2026, 10, 31), 1)
+@pytest.mark.parametrize(('requested', 'staff', 'expected'), [
+    (None, '', DraftStatus.NOT_STARTED),
+    (None, '植田', DraftStatus.INCOMPLETE),
+    (date(2026, 10, 31), '', DraftStatus.UNASSIGNED),
+])
+def test_draft_status(requested: date | None, staff: str, expected: DraftStatus) -> None:
+    assert draft_status(make_draft(date(2026, 10, 31), requested, staff)) == expected
 
-    assert (overview.unassigned_count, overview.unrequested_count) == (1, 1)
+
+def test_overview_counts_status_by_department() -> None:
+    drafts = [make_draft(date(2026, 10, 31)), make_draft(date(2026, 10, 31), staff='植田'),
+              make_draft(date(2026, 10, 31)),
+              Draft(date(2026, 10, 31), date(2026, 10, 31), '診断書', '外科', '佐藤', '', '1')]
+
+    overview = make_overview(drafts, date(2026, 10, 31), 1)
+
+    assert overview.status_counts == {DraftStatus.NOT_STARTED: 2, DraftStatus.INCOMPLETE: 1,
+                                      DraftStatus.UNASSIGNED: 1}
+    assert overview.department_status_counts == [
+        ('内科', {DraftStatus.NOT_STARTED: 2, DraftStatus.INCOMPLETE: 1}),
+        ('外科', {DraftStatus.UNASSIGNED: 1}),
+    ]
 
 
 def test_load_overview_reads_source_with_configured_days(config_path: Path, make_workbook: MakeWorkbook) -> None:
@@ -233,6 +251,17 @@ def test_export_staff(config_path: Path, make_workbook: MakeWorkbook, startfile:
 
     assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数_花﨑_20250401-20250430.xlsx'
     assert load_workbook(output_path)['個人']['B2'].value == 1
+
+
+def test_export_staff_limits_documents_to_top(config_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    analyzer = MedicalDocsAnalyzer()
+    staff_summary = MagicMock(wraps=analyzer.staff_summary)
+    monkeypatch.setattr(analyzer, 'staff_summary', staff_summary)
+    monkeypatch.setattr('service.service_medical_docs_analyzer.save_staff_results', MagicMock(return_value='x'))
+
+    analyzer.export_staff('花﨑', date(2025, 4, 1), date(2025, 4, 30))
+
+    staff_summary.assert_called_once_with('花﨑', date(2025, 4, 1), date(2025, 4, 30), TOP_DOCUMENT_COUNT)
 
 
 def test_run_analysis_raises_when_no_data_in_period(config_path: Path) -> None:

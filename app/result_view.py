@@ -10,17 +10,27 @@ from app import constants
 from app.charts import overall_figure, staff_figure
 from service.service_data_analyzer import StaffCounts
 from service.service_excel_reader import Draft
-from service.service_medical_docs_analyzer import OverallSummary, Overview
+from service.service_medical_docs_analyzer import DraftStatus, OverallSummary, Overview, draft_status
 
 OVERVIEW_COLUMN_WIDTHS = (90, 80, 240, 100, 90, 80, 90, 150)
 
 
 def overview_row(draft: Draft) -> list[object]:
-    blanks = [label for label, blank in ((constants.STAFF_BLANK_LABEL, not draft.staff_name),
-                                         (constants.REQUESTED_BLANK_LABEL, draft.requested_date is None)) if blank]
     requested = f'{draft.requested_date:%Y/%m/%d}' if draft.requested_date else ''
     return [f'{draft.received_date:%Y/%m/%d}', draft.patient_id, draft.document_name, draft.department,
-            draft.doctor_name, draft.staff_name, requested, '・'.join(blanks)]
+            draft.doctor_name, draft.staff_name, requested, draft_status(draft)]
+
+
+def overview_department_rows(overview: Overview) -> list[list[object]]:
+    return [[department, counts[DraftStatus.NOT_STARTED], counts[DraftStatus.INCOMPLETE],
+             counts[DraftStatus.UNASSIGNED], counts.total()]
+            for department, counts in overview.department_status_counts]
+
+
+def add_vertical_scrollbar(parent: ttk.Frame, tree: ttk.Treeview, row: int, column: int) -> None:
+    scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=tree.yview)
+    scrollbar.grid(row=row, column=column, sticky=tk.NS, pady=5)
+    tree.configure(yscrollcommand=scrollbar.set)
 
 
 def overall_rows(summary: OverallSummary) -> list[list[object]]:
@@ -88,17 +98,19 @@ class ResultView:
     def _setup_overview_tab(self) -> None:
         tab = self.overview_tab
         tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(1, weight=1)
+        tab.rowconfigure(2, weight=1)
         self.overview_title = ttk.Label(tab, text='')
         self.overview_title.grid(row=0, column=0, columnspan=2, sticky=tk.W)
+        self.overview_department_tree = ttk.Treeview(tab, show='headings', height=6)
+        fill_tree(self.overview_department_tree, list(constants.OVERVIEW_DEPARTMENT_COLUMNS), [])
+        self.overview_department_tree.grid(row=1, column=0, sticky=tk.EW, pady=5)
+        add_vertical_scrollbar(tab, self.overview_department_tree, row=1, column=1)
         self.overview_tree = ttk.Treeview(tab, show='headings', columns=constants.OVERVIEW_COLUMNS)
         for column, width in zip(constants.OVERVIEW_COLUMNS, OVERVIEW_COLUMN_WIDTHS):
             self.overview_tree.heading(column, text=column)
             self.overview_tree.column(column, width=width, minwidth=width, anchor=tk.W)
-        self.overview_tree.grid(row=1, column=0, sticky=tk.NSEW, pady=5)
-        scrollbar = ttk.Scrollbar(tab, orient=tk.VERTICAL, command=self.overview_tree.yview)
-        scrollbar.grid(row=1, column=1, sticky=tk.NS, pady=5)
-        self.overview_tree.configure(yscrollcommand=scrollbar.set)
+        self.overview_tree.grid(row=2, column=0, sticky=tk.NSEW, pady=5)
+        add_vertical_scrollbar(tab, self.overview_tree, row=2, column=1)
 
     def _setup_overall_tab(self, on_export: Callable[[], None]) -> None:
         tab = self.overall_tab
@@ -117,7 +129,7 @@ class ResultView:
         tab.columnconfigure(1, weight=1)
         tab.rowconfigure(2, weight=1)
         header = ttk.Frame(tab)
-        header.grid(row=0, column=0, columnspan=2, sticky=tk.EW)
+        header.grid(row=0, column=0, columnspan=3, sticky=tk.EW)
         ttk.Label(header, text=constants.STAFF_TAB_LABEL).pack(side=tk.LEFT, padx=5)
         self.staff_var = tk.StringVar()
         self.staff_combobox = ttk.Combobox(header, width=12, state='readonly', textvariable=self.staff_var)
@@ -131,19 +143,26 @@ class ResultView:
         self.department_tree.grid(row=1, column=0, sticky=tk.NSEW, padx=(0, 5), pady=5)
         self.document_tree = ttk.Treeview(tab, show='headings', height=10)
         self.document_tree.grid(row=1, column=1, sticky=tk.NSEW, pady=5)
+        # 10 行を表示し、それより多い文書名はスクロールで見る
+        add_vertical_scrollbar(tab, self.document_tree, row=1, column=2)
         self.staff_chart = ChartArea(tab)
-        self.staff_chart.frame.grid(row=2, column=0, columnspan=2, sticky=tk.NSEW)
+        self.staff_chart.frame.grid(row=2, column=0, columnspan=3, sticky=tk.NSEW)
 
     def show_overview(self, overview: Overview) -> None:
+        status_counts = overview.status_counts
         self.overview_title.configure(text=constants.OVERVIEW_TITLE_FORMAT.format(
             start=overview.start_date, end=overview.end_date, total=len(overview.drafts),
-            unassigned=overview.unassigned_count, unrequested=overview.unrequested_count))
+            not_started=status_counts[DraftStatus.NOT_STARTED], incomplete=status_counts[DraftStatus.INCOMPLETE],
+            unassigned=status_counts[DraftStatus.UNASSIGNED]))
+        fill_tree(self.overview_department_tree, list(constants.OVERVIEW_DEPARTMENT_COLUMNS),
+                  overview_department_rows(overview))
         self.overview_tree.delete(*self.overview_tree.get_children())
         for draft in overview.drafts:
             self.overview_tree.insert('', tk.END, values=overview_row(draft))
 
     def show_overview_error(self, error: Exception) -> None:
         self.overview_title.configure(text=constants.OVERVIEW_ERROR_FORMAT.format(error=error))
+        self.overview_department_tree.delete(*self.overview_department_tree.get_children())
         self.overview_tree.delete(*self.overview_tree.get_children())
 
     def show_overall(self, summary: OverallSummary) -> None:

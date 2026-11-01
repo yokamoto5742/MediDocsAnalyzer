@@ -16,6 +16,14 @@ from service.service_medical_docs_analyzer import ImportPlan, OverallSummary, Ov
 from utils.config_manager import load_config
 
 DRAFT = Draft(date(2025, 4, 1), None, '診断書', '内科', '佐藤', '', '1')
+ANALYZE_SAVED_PERIOD = MedicalDocsAnalyzerGUI.analyze_saved_period
+
+
+@pytest.fixture(autouse=True)
+def analyze_saved_period() -> Iterator[MagicMock]:
+    """起動時の自動集計は専用のテストで確かめ、ほかのテストでは止める"""
+    with patch.object(MedicalDocsAnalyzerGUI, 'analyze_saved_period') as mock:
+        yield mock
 
 
 def make_overview(drafts: list[Draft]) -> Overview:
@@ -318,8 +326,35 @@ def test_admin_user_can_use_everything(config_path: Path, root: tk.Tk, messagebo
     assert gui.result_view.notebook.tab(gui.result_view.overall_tab, 'state') == 'normal'
 
 
-def test_open_settings_opens_dialog(gui: MedicalDocsAnalyzerGUI) -> None:
-    with patch('app.app_window.SettingsDialog') as dialog:
+@pytest.mark.parametrize('saved', [True, False])
+def test_open_settings_refreshes_overview_when_saved(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                                     saved: bool) -> None:
+    analyzer.load_overview.reset_mock()
+
+    with patch('app.app_window.SettingsDialog') as dialog, patch.object(gui.root, 'wait_window') as wait_window:
+        dialog.return_value.saved = saved
         gui.open_settings()
 
     dialog.assert_called_once_with(gui.root)
+    wait_window.assert_called_once_with(dialog.return_value.dialog)
+    assert analyzer.load_overview.call_count == (1 if saved else 0)
+
+
+def test_init_analyzes_saved_period(gui: MedicalDocsAnalyzerGUI, analyze_saved_period: MagicMock) -> None:
+    analyze_saved_period.assert_called_once_with()
+
+
+def test_analyze_saved_period_runs_analysis(gui: MedicalDocsAnalyzerGUI) -> None:
+    with patch.object(gui, 'start_analysis') as start_analysis:
+        ANALYZE_SAVED_PERIOD(gui)
+
+    start_analysis.assert_called_once_with()
+
+
+def test_analyze_saved_period_skips_without_saved_dates(gui: MedicalDocsAnalyzerGUI) -> None:
+    gui.config.remove_option('Analysis', 'start_date')
+
+    with patch.object(gui, 'start_analysis') as start_analysis:
+        ANALYZE_SAVED_PERIOD(gui)
+
+    start_analysis.assert_not_called()
