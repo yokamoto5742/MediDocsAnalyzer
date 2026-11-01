@@ -266,8 +266,7 @@ class ResultView:
 
     def show_trend(self, trend: TrendCounts, department: str) -> None:
         rows = trend.table_rows
-        self.trend_title.configure(text=constants.TREND_TITLE_FORMAT.format(
-            department=department, first=rows[0][0], last=rows[-1][0], total=sum(cast(int, row[-1]) for row in rows)))
+        self.trend_title.configure(text='')
         # 範囲外と本日より後の月は空欄にする
         fill_tree(self.trend_tree, [constants.TREND_CORNER_HEADER, *trend.month_labels, constants.TOTAL_ROW_LABEL],
                   [['' if value is None else value for value in row] for row in rows], first_width=80)

@@ -155,7 +155,7 @@ def test_show_trend_rows_follow_years(root: tk.Tk) -> None:
 
     view.show_trend(TREND, '内科')
 
-    assert view.trend_title.cget('text') == '医師依頼日で集計　内科　2025年度〜2026年度　17件'
+    assert view.trend_title.cget('text') == ''
     assert (view.trend_tree.heading(0, 'text'), view.trend_tree.heading(1, 'text')) == ('件数', '4月')
     assert tree_values(view.trend_tree) == [
         ('2025年度', *['1'] * 12, '12'),
