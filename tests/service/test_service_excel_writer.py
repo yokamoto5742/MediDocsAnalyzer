@@ -81,15 +81,21 @@ def chart_types(sheet: Worksheet) -> list[str]:
 
 def test_save_trend_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(service_excel_writer.os, 'startfile', MagicMock(), raising=False)
-    trend = TrendCounts(4, [(2024, [1] * 12), (2025, [2] * 12), (2026, [3, *[None] * 11])])
+    trend = TrendCounts(4, [(2024, [1] * 12), (2025, [2, 0, *[2] * 10]), (2026, [3, *[None] * 11])])
 
-    output_path = save_trend_results(trend, DEPARTMENT, str(tmp_path / 'output'))
+    output_path = save_trend_results(trend, DEPARTMENT, date(2024, 4, 1), date(2026, 4, 30),
+                                     str(tmp_path / 'output'))
 
-    assert Path(output_path).name == f'{TITLE}推移_{DEPARTMENT}_2024-2026.xlsx'
+    assert Path(output_path).name == f'{TITLE}推移_{DEPARTMENT}_20240401-20260430.xlsx'
     sheet = active_sheet(output_path)
     values = sheet_values(sheet)
+    assert values[0][0] == f'{TITLE}推移(医師依頼日) {DEPARTMENT} 2024/04/01～2026/04/30'
     assert values[2] == ['件数', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月',
                          '3月', '合計']
-    assert values[3:6] == [['2024年度', *[1] * 12, 12], ['2025年度', *[2] * 12, 24],
+    assert values[3:6] == [['2024年度', *[1] * 12, 12], ['2025年度', 2, 0, *[2] * 10, 22],
                            ['2026年度', 3, *[None] * 11, 3]]
     assert chart_types(sheet) == ['lineChart']
+    # グラフの元は隠しシートで、0 件の月は空欄にして線を引かない
+    chart_sheet = load_workbook(output_path)['グラフ用']
+    assert chart_sheet.sheet_state == 'hidden'
+    assert [cell.value for cell in chart_sheet[2]][:4] == ['2025年度', 2, None, 2]

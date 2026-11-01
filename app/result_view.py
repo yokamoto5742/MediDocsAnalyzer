@@ -5,6 +5,7 @@ from typing import cast
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from tkcalendar import DateEntry
 
 from app import constants
 from app.charts import overall_figure, staff_figure, trend_figure
@@ -163,26 +164,35 @@ class ResultView:
         tab.rowconfigure(4, weight=1)
         header = ttk.Frame(tab)
         header.grid(row=0, column=0, sticky=tk.EW)
-        self.trend_start_year_var = tk.StringVar()
-        self.trend_end_year_var = tk.StringVar()
-        for label, variable in ((constants.START_YEAR_LABEL, self.trend_start_year_var),
-                                (constants.END_YEAR_LABEL, self.trend_end_year_var)):
-            ttk.Label(header, text=label).pack(side=tk.LEFT, padx=5)
-            ttk.Spinbox(header, from_=2000, to=2100, width=6, textvariable=variable,
-                        command=on_changed).pack(side=tk.LEFT)
-        ttk.Button(header, text=constants.SHOW_BUTTON_LABEL, command=on_changed).pack(side=tk.LEFT, padx=10)
+        ttk.Label(header, text=constants.TREND_DEPARTMENT_LABEL).pack(side=tk.LEFT, padx=5)
+        self.trend_department_var = tk.StringVar()
+        self.trend_department_combobox = ttk.Combobox(header, width=14, state='readonly',
+                                                      textvariable=self.trend_department_var)
+        self.trend_department_combobox.pack(side=tk.LEFT)
+        self.trend_department_combobox.bind('<<ComboboxSelected>>', lambda _event: on_changed())
+
+        ttk.Label(header, text=constants.TREND_RANGE_LABEL).pack(side=tk.LEFT, padx=(20, 5))
+        self.trend_start_date = self._create_trend_date_entry(header, on_changed)
+        ttk.Label(header, text=constants.TREND_RANGE_SEPARATOR).pack(side=tk.LEFT, padx=5)
+        self.trend_end_date = self._create_trend_date_entry(header, on_changed)
         ttk.Button(header, text=constants.EXPORT_BUTTON_LABEL, command=on_export).pack(side=tk.RIGHT)
 
-        # 診療科はタブの見出しだけを使い、表と図は全タブで共有して描き直す
-        self.trend_department_notebook = ttk.Notebook(tab, height=1)
-        self.trend_department_notebook.grid(row=1, column=0, sticky=tk.EW, pady=(5, 0))
-        self.trend_department_notebook.bind('<<NotebookTabChanged>>', lambda _event: on_changed())
         self.trend_title = ttk.Label(tab, text='')
         self.trend_title.grid(row=2, column=0, sticky=tk.W, pady=(5, 0))
         self.trend_tree = ttk.Treeview(tab, show='headings', height=5)
         self.trend_tree.grid(row=3, column=0, sticky=tk.EW, pady=5)
         self.trend_chart = ChartArea(tab)
         self.trend_chart.frame.grid(row=4, column=0, sticky=tk.NSEW)
+
+    @staticmethod
+    def _create_trend_date_entry(parent: ttk.Frame, on_changed: Callable[[], None]) -> DateEntry:
+        """カレンダーで選んだときと、手入力して Enter を押したときに表示し直す"""
+        date_entry = DateEntry(parent, width=12, background='darkblue', foreground='white', borderwidth=2,
+                               locale='ja_JP', date_pattern='yyyy/mm/dd')
+        date_entry.pack(side=tk.LEFT)
+        date_entry.bind('<<DateEntrySelected>>', lambda _event: on_changed())
+        date_entry.bind('<Return>', lambda _event: on_changed())
+        return date_entry
 
     def show_overview(self, overview: Overview) -> None:
         status_counts = overview.status_counts
@@ -247,24 +257,18 @@ class ResultView:
         self.staff_chart.show(staff_figure(staff_counts))
 
     def set_trend_departments(self, departments: list[str], selected: str) -> None:
-        """診療科のタブを作り直し、selected があればそのタブを選ぶ"""
-        notebook = self.trend_department_notebook
-        for frame in notebook.winfo_children():
-            frame.destroy()
-        for department in departments:
-            notebook.add(ttk.Frame(notebook), text=department)
-        if selected in departments:
-            notebook.select(departments.index(selected))
+        """診療科の選択肢を入れ、selected が無ければ先頭を選ぶ"""
+        self.trend_department_combobox.configure(values=departments)
+        self.trend_department_var.set(selected if selected in departments else departments[0])
 
     def selected_trend_department(self) -> str:
-        notebook = self.trend_department_notebook
-        return notebook.tab(notebook.select(), 'text') if notebook.select() else ''
+        return self.trend_department_var.get()
 
     def show_trend(self, trend: TrendCounts, department: str) -> None:
         rows = trend.table_rows
         self.trend_title.configure(text=constants.TREND_TITLE_FORMAT.format(
             department=department, first=rows[0][0], last=rows[-1][0], total=sum(cast(int, row[-1]) for row in rows)))
-        # 本日より後の月は空欄にする
+        # 範囲外と本日より後の月は空欄にする
         fill_tree(self.trend_tree, [constants.TREND_CORNER_HEADER, *trend.month_labels, constants.TOTAL_ROW_LABEL],
                   [['' if value is None else value for value in row] for row in rows], first_width=80)
         self.trend_chart.show(trend_figure(trend, department))

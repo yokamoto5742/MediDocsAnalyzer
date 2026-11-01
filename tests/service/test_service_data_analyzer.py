@@ -79,7 +79,8 @@ def test_count_trend_uses_requested_date_by_fiscal_year() -> None:
         Document(date(2024, 3, 1), date(2024, 3, 31), '診断書', '内科', '佐藤', '植田'),
     ])
 
-    trend = count_trend(connection, '内科', 2025, 2026, 4, date(2026, 5, 15))
+    # 今月(5月)は途中までの件数を出し、本日より後の月は None
+    trend = count_trend(connection, '内科', date(2025, 4, 1), date(2027, 3, 31), 4, date(2026, 5, 15))
 
     assert trend.month_labels[:3] == ['4月', '5月', '6月']
     assert trend.by_year == [
@@ -88,13 +89,28 @@ def test_count_trend_uses_requested_date_by_fiscal_year() -> None:
     ]
     assert trend.table_rows[0][0] == '2025年度'
     assert trend.table_rows[1][-1] == 1
-    total = count_trend(connection, None, 2025, 2025, 4, date(2026, 5, 15))
+    total = count_trend(connection, None, date(2025, 4, 1), date(2026, 3, 31), 4, date(2026, 5, 15))
     assert total.by_year == [(2025, [2, *[0] * 10, 1])]
     connection.close()
 
 
+def test_count_trend_limits_to_date_range() -> None:
+    connection = connect(':memory:')
+    replace_documents_between(connection, date(2024, 1, 1), date(2099, 12, 31), [
+        Document(date(2025, 2, 1), date(2025, 2, 10), '診断書', '内科', '佐藤', '植田'),
+        Document(date(2025, 2, 1), date(2025, 2, 20), '診断書', '内科', '佐藤', '植田'),
+        Document(date(2025, 11, 1), date(2025, 11, 2), '診断書', '内科', '佐藤', '植田'),
+    ])
+
+    # 範囲の前後の月は None、範囲の端の月は範囲内の日だけ数える
+    trend = count_trend(connection, None, date(2025, 2, 15), date(2025, 11, 1), 1, date(2026, 11, 1))
+
+    assert trend.by_year == [(2025, [None, 1, *[0] * 9, None])]
+    connection.close()
+
+
 def test_count_trend_calendar_year() -> None:
-    trend = count_trend(connect(':memory:'), None, 2025, 2025, 1, date(2026, 1, 1))
+    trend = count_trend(connect(':memory:'), None, date(2025, 1, 1), date(2025, 12, 31), 1, date(2026, 1, 1))
 
     assert (trend.year_header, trend.month_labels[0]) == ('年', '1月')
     assert trend.by_year == [(2025, [0] * 12)]

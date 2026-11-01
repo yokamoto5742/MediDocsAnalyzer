@@ -34,5 +34,10 @@ def get_period_range(year: int, period_name: str, year_start_month: int) -> tupl
     return start, end
 
 
+def fiscal_year(day: date, year_start_month: int) -> int:
+    """year_start_month 月始まりで day が属する年(年度)。4月始まりなら 1〜3月は前年になる"""
+    return day.year - (day.month < year_start_month)
+
+
 def parse_date(text: str) -> date:
     return datetime.strptime(text.strip(), DATE_FORMAT).date()

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from service.service_excel_reader import NoDataError
-from utils.date_period import get_period_range
+from utils.date_period import fiscal_year, get_period_range
 
 PERIOD_CONDITION = 'received_date BETWEEN ? AND ?'
 
@@ -29,7 +29,7 @@ class StaffCounts:
 
 @dataclass
 class TrendCounts:
-    """年(年度)ごとの月別件数。本日より後の月は None"""
+    """年(年度)ごとの月別件数。範囲外と本日より後の月は None"""
     year_start_month: int
     by_year: list[tuple[int, list[int | None]]]
 
@@ -118,13 +118,11 @@ def count_staff_documents(connection: sqlite3.Connection, staff_name: str, start
     )
 
 
-def count_trend(connection: sqlite3.Connection, department: str | None, start_year: int, end_year: int,
+def count_trend(connection: sqlite3.Connection, department: str | None, start_date: date, end_date: date,
                 year_start_month: int, today: date) -> TrendCounts:
-    """医師依頼日で、年(年度)ごとに月別の件数を数える。department が None なら全診療科"""
-    first_day = get_period_range(start_year, '一年', year_start_month)[0]
-    last_day = get_period_range(end_year, '一年', year_start_month)[1]
+    """医師依頼日が範囲内の文書を、年(年度)ごとに月別に数える。department が None なら全診療科"""
     condition = 'requested_date BETWEEN ? AND ?'
-    parameters = [first_day.isoformat(), last_day.isoformat()]
+    parameters = [start_date.isoformat(), end_date.isoformat()]
     if department is not None:
         condition += ' AND department = ?'
         parameters.append(department)
@@ -132,10 +130,12 @@ def count_trend(connection: sqlite3.Connection, department: str | None, start_ye
         f"SELECT strftime('%Y/%m', requested_date), COUNT(*) FROM documents WHERE {condition} GROUP BY 1",
         parameters).fetchall())
 
-    # 'YYYY/MM' は文字列のまま大小を比べられる
-    this_month = f'{today:%Y/%m}'
+    # 'YYYY/MM' は文字列のまま大小を比べられる。今月は途中までの件数を出す
+    first_month = f'{start_date:%Y/%m}'
+    last_month = min(f'{end_date:%Y/%m}', f'{today:%Y/%m}')
     by_year: list[tuple[int, list[int | None]]] = []
-    for year in range(start_year, end_year + 1):
+    for year in range(fiscal_year(start_date, year_start_month), fiscal_year(end_date, year_start_month) + 1):
         months = months_between(*get_period_range(year, '一年', year_start_month))
-        by_year.append((year, [None if month > this_month else month_counts.get(month, 0) for month in months]))
+        by_year.append((year, [month_counts.get(month, 0) if first_month <= month <= last_month else None
+                               for month in months]))
     return TrendCounts(year_start_month, by_year)

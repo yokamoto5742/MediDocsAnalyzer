@@ -1,6 +1,8 @@
+import math
 import tkinter as tk
 from datetime import date
 from tkinter import ttk
+from typing import cast
 from unittest.mock import MagicMock
 
 from app.charts import overall_figure, staff_figure, trend_figure
@@ -36,6 +38,14 @@ def test_figures() -> None:
     assert len(staff_figure(STAFF_COUNTS).axes[0].lines) == 1
     trend_axes = trend_figure(TREND, '内科').axes[0]
     assert [line.get_label() for line in trend_axes.lines] == ['2025年度', '2026年度']
+
+
+def test_trend_figure_does_not_draw_zero_months() -> None:
+    trend = TrendCounts(1, [(2026, [0, 5, *[None] * 10])])
+
+    y_values = cast(list[float], trend_figure(trend, '内科').axes[0].lines[0].get_ydata())
+
+    assert math.isnan(y_values[0]) and y_values[1] == 5 and math.isnan(y_values[2])
 
 
 def test_tabs_are_overview_overall_staff_trend(root: tk.Tk) -> None:
@@ -123,8 +133,7 @@ def test_set_trend_departments_selects_saved_department(root: tk.Tk) -> None:
     assert view.selected_trend_department() == '外科'
 
     view.set_trend_departments(['合計', '内科'], '外科')
-    notebook = view.trend_department_notebook
-    assert [notebook.tab(tab, 'text') for tab in notebook.tabs()] == ['合計', '内科']
+    assert view.trend_department_combobox.cget('values') == ('合計', '内科')
     assert view.selected_trend_department() == '合計'
 
 

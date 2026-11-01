@@ -222,18 +222,18 @@ class MedicalDocsAnalyzer:
         return save_staff_results(self.staff_summary(staff_name, start_date, end_date, TOP_DOCUMENT_COUNT),
                                   start_date, end_date, output_dir)
 
-    def trend_summary(self, department: str, start_year: int, end_year: int, year_start_month: int,
+    def trend_summary(self, department: str, start_date: date, end_date: date, year_start_month: int,
                       today: date) -> TrendCounts:
-        """DB の文書を医師依頼日で年(年度)ごとの月別に数える。department が合計なら全診療科"""
+        """医師依頼日が範囲内の DB の文書を、年(年度)ごとの月別に数える。department が合計なら全診療科"""
         with self._open_database() as connection:
             return count_trend(connection, None if department == TOTAL_LABEL else department,
-                               start_year, end_year, year_start_month, today)
+                               start_date, end_date, year_start_month, today)
 
-    def export_trend(self, department: str, start_year: int, end_year: int, year_start_month: int,
+    def export_trend(self, department: str, start_date: date, end_date: date, year_start_month: int,
                      today: date) -> str:
         """全体推移を Excel に保存し、保存先のパスを返す"""
-        trend = self.trend_summary(department, start_year, end_year, year_start_month, today)
-        return save_trend_results(trend, department, load_config()['PATHS']['output_dir'])
+        trend = self.trend_summary(department, start_date, end_date, year_start_month, today)
+        return save_trend_results(trend, department, start_date, end_date, load_config()['PATHS']['output_dir'])
 
     def run_analysis(self, start_date: date, end_date: date) -> str:
         """期間内の文書を集計して Excel に保存し、保存先のパスを返す"""

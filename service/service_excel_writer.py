@@ -134,14 +134,13 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
                          f'医療文書作成件数_{name}_{start_date:%Y%m%d}-{end_date:%Y%m%d}.xlsx')
 
 
-def save_trend_results(trend: TrendCounts, department: str, output_dir: str) -> str:
+def save_trend_results(trend: TrendCounts, department: str, start_date: date, end_date: date,
+                       output_dir: str) -> str:
     """年(年度)ごとの月別件数の表と、1 年 1 本の折れ線グラフを新しいブックに書いて保存する"""
     wb = Workbook()
     sheet = cast(Worksheet, wb.active)
     sheet.title = '推移'
-    first_year, last_year = trend.by_year[0][0], trend.by_year[-1][0]
-    sheet['A1'] = (f'医療文書作成件数推移(医師依頼日) {department} '
-                   f'{trend.year_label(first_year)}-{trend.year_label(last_year)}')
+    sheet['A1'] = f'医療文書作成件数推移(医師依頼日) {department} {start_date:%Y/%m/%d}～{end_date:%Y/%m/%d}'
     sheet['A1'].font = Font(bold=True, size=14)
 
     headers = [TREND_CORNER_LABEL, *trend.month_labels, TOTAL_LABEL]
@@ -153,9 +152,16 @@ def save_trend_results(trend: TrendCounts, department: str, output_dir: str) -> 
             sheet.cell(row=row_index, column=column_index, value=value)
     sheet.column_dimensions['A'].width = 12
 
+    # 0 件の月に線を引かないよう、グラフには 0 を空欄にした値を隠しシートに置いて使う
+    chart_sheet = wb.create_sheet('グラフ用')
+    chart_sheet.sheet_state = 'hidden'
+    for year, counts in trend.by_year:
+        chart_sheet.append([trend.year_label(year), *(count or None for count in counts)])
+
     chart = make_line_chart(f'{department} 月別件数')
+    chart.visible_cells_only = False
     # 1 行を 1 本の線にし、行の先頭(年の名前)を線の名前にする
-    chart.add_data(Reference(sheet, min_col=1, max_col=13, min_row=4, max_row=len(rows) + 3),
+    chart.add_data(Reference(chart_sheet, min_col=1, max_col=13, min_row=1, max_row=len(rows)),
                    titles_from_data=True, from_rows=True)
     chart.set_categories(Reference(sheet, min_col=2, max_col=13, min_row=3))
     assert chart.legend is not None
@@ -163,4 +169,5 @@ def save_trend_results(trend: TrendCounts, department: str, output_dir: str) -> 
     sheet.add_chart(chart, f'A{len(rows) + 6}')
     set_print_layout(sheet)
 
-    return save_and_open(wb, output_dir, f'医療文書作成件数推移_{department}_{first_year}-{last_year}.xlsx')
+    return save_and_open(wb, output_dir,
+                         f'医療文書作成件数推移_{department}_{start_date:%Y%m%d}-{end_date:%Y%m%d}.xlsx')
