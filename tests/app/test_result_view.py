@@ -51,6 +51,16 @@ def test_trend_figure_does_not_draw_zero_months() -> None:
     assert line.get_marker() == 'o'
 
 
+def test_trend_figure_always_shows_twelve_month_labels() -> None:
+    # 後ろの月に値が無くても、4月〜3月のラベルをすべて出す
+    trend = TrendCounts(4, [(2026, [5, 3, *[None] * 10])])
+
+    axes = trend_figure(trend, '内科').axes[0]
+
+    assert [label.get_text() for label in axes.get_xticklabels()] == trend.month_labels
+    assert axes.get_xlim() == (-0.5, 11.5)
+
+
 def test_tabs_are_overview_overall_staff_trend(root: tk.Tk) -> None:
     view = make_view(root)
 

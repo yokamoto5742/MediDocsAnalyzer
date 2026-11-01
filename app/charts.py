@@ -58,9 +58,13 @@ def trend_figure(trend: TrendCounts, department: str) -> Figure:
     前後が 0 件の月も見えるよう、点の印を付ける"""
     figure = Figure(figsize=FIGURE_SIZE, layout='constrained')
     axes = figure.add_subplot()
+    month_positions = range(len(trend.month_labels))
     for year, counts in trend.by_year:
-        axes.plot(trend.month_labels, [count or math.nan for count in counts], marker='o', markersize=4,
+        axes.plot(month_positions, [count or math.nan for count in counts], marker='o', markersize=4,
                   label=trend.year_label(year))
+    # 値の無い月も軸から外れないよう、12 か月の目盛りと範囲を固定する
+    axes.set_xticks(month_positions, trend.month_labels)
+    axes.set_xlim(-0.5, len(trend.month_labels) - 0.5)
     axes.set_title(f'{department} 月別件数')
     set_count_axis(axes, [count for _, counts in trend.by_year for count in counts if count is not None])
     # 凡例は年を横に並べてグラフの下に置く
