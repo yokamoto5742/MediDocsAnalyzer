@@ -43,9 +43,12 @@ def test_figures() -> None:
 def test_trend_figure_does_not_draw_zero_months() -> None:
     trend = TrendCounts(1, [(2026, [0, 5, *[None] * 10])])
 
-    y_values = cast(list[float], trend_figure(trend, '内科').axes[0].lines[0].get_ydata())
+    line = trend_figure(trend, '内科').axes[0].lines[0]
+    y_values = cast(list[float], line.get_ydata())
 
     assert math.isnan(y_values[0]) and y_values[1] == 5 and math.isnan(y_values[2])
+    # 前後が 0 件でも見えるよう点の印を付ける
+    assert line.get_marker() == 'o'
 
 
 def test_tabs_are_overview_overall_staff_trend(root: tk.Tk) -> None:

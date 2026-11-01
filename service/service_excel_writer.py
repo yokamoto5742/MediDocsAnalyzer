@@ -5,6 +5,7 @@ from typing import cast
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.chart import LineChart, Reference
+from openpyxl.chart.marker import Marker
 from openpyxl.styles import Font
 from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.worksheet.worksheet import Worksheet
@@ -164,6 +165,9 @@ def save_trend_results(trend: TrendCounts, department: str, start_date: date, en
     chart.add_data(Reference(chart_sheet, min_col=1, max_col=13, min_row=1, max_row=len(rows)),
                    titles_from_data=True, from_rows=True)
     chart.set_categories(Reference(sheet, min_col=2, max_col=13, min_row=3))
+    # 前後が 0 件の月も見えるよう、点の印を付ける
+    for series in chart.series:
+        series.marker = Marker(symbol='circle', size=5)
     assert chart.legend is not None
     chart.legend.position = 'b'
     sheet.add_chart(chart, f'A{len(rows) + 6}')
