@@ -7,8 +7,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from app import constants
-from app.charts import overall_figure, staff_figure
-from service.service_data_analyzer import StaffCounts
+from app.charts import overall_figure, staff_figure, trend_figure
+from service.service_data_analyzer import StaffCounts, TrendCounts
 from service.service_excel_reader import Draft
 from service.service_medical_docs_analyzer import DraftStatus, OverallSummary, Overview, draft_status
 
@@ -71,12 +71,18 @@ class ChartArea:
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+    def clear(self) -> None:
+        if self.canvas is not None:
+            self.canvas.get_tk_widget().destroy()
+            self.canvas = None
+
 
 class ResultView:
-    """「概要」タブで下書きの一覧を、「全体」「個人」タブで集計結果を表と図にして見せる"""
+    """「概要」タブで下書きの一覧を、「全体」「個人」「全体推移」タブで集計結果を表と図にして見せる"""
 
     def __init__(self, parent: tk.Misc, on_export_overall: Callable[[], None],
-                 on_export_staff: Callable[[], None], on_staff_selected: Callable[[], None]) -> None:
+                 on_export_staff: Callable[[], None], on_staff_selected: Callable[[], None],
+                 on_export_trend: Callable[[], None], on_trend_changed: Callable[[], None]) -> None:
         # 職員としてログインしたときの本人の氏名。None なら全員分を見られる
         self.restricted_staff: str | None = None
         # 全体の表の担当者の行と合計行。並べ替えても合計行は最後に置く
@@ -90,10 +96,13 @@ class ResultView:
         self.staff_tab = ttk.Frame(self.notebook, padding="5")
         self.notebook.add(self.overview_tab, text=constants.OVERVIEW_TAB_LABEL)
         self.notebook.add(self.overall_tab, text=constants.OVERALL_TAB_LABEL)
+        self.trend_tab = ttk.Frame(self.notebook, padding="5")
         self.notebook.add(self.staff_tab, text=constants.STAFF_SUMMARY_TAB_LABEL)
+        self.notebook.add(self.trend_tab, text=constants.TREND_TAB_LABEL)
         self._setup_overview_tab()
         self._setup_overall_tab(on_export_overall)
         self._setup_staff_tab(on_export_staff, on_staff_selected)
+        self._setup_trend_tab(on_export_trend, on_trend_changed)
 
     def _setup_overview_tab(self) -> None:
         tab = self.overview_tab
@@ -148,6 +157,33 @@ class ResultView:
         self.staff_chart = ChartArea(tab)
         self.staff_chart.frame.grid(row=2, column=0, columnspan=3, sticky=tk.NSEW)
 
+    def _setup_trend_tab(self, on_export: Callable[[], None], on_changed: Callable[[], None]) -> None:
+        tab = self.trend_tab
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(4, weight=1)
+        header = ttk.Frame(tab)
+        header.grid(row=0, column=0, sticky=tk.EW)
+        self.trend_start_year_var = tk.StringVar()
+        self.trend_end_year_var = tk.StringVar()
+        for label, variable in ((constants.START_YEAR_LABEL, self.trend_start_year_var),
+                                (constants.END_YEAR_LABEL, self.trend_end_year_var)):
+            ttk.Label(header, text=label).pack(side=tk.LEFT, padx=5)
+            ttk.Spinbox(header, from_=2000, to=2100, width=6, textvariable=variable,
+                        command=on_changed).pack(side=tk.LEFT)
+        ttk.Button(header, text=constants.SHOW_BUTTON_LABEL, command=on_changed).pack(side=tk.LEFT, padx=10)
+        ttk.Button(header, text=constants.EXPORT_BUTTON_LABEL, command=on_export).pack(side=tk.RIGHT)
+
+        # 診療科はタブの見出しだけを使い、表と図は全タブで共有して描き直す
+        self.trend_department_notebook = ttk.Notebook(tab, height=1)
+        self.trend_department_notebook.grid(row=1, column=0, sticky=tk.EW, pady=(5, 0))
+        self.trend_department_notebook.bind('<<NotebookTabChanged>>', lambda _event: on_changed())
+        self.trend_title = ttk.Label(tab, text='')
+        self.trend_title.grid(row=2, column=0, sticky=tk.W, pady=(5, 0))
+        self.trend_tree = ttk.Treeview(tab, show='headings', height=5)
+        self.trend_tree.grid(row=3, column=0, sticky=tk.EW, pady=5)
+        self.trend_chart = ChartArea(tab)
+        self.trend_chart.frame.grid(row=4, column=0, sticky=tk.NSEW)
+
     def show_overview(self, overview: Overview) -> None:
         status_counts = overview.status_counts
         self.overview_title.configure(text=constants.OVERVIEW_TITLE_FORMAT.format(
@@ -188,9 +224,10 @@ class ResultView:
             self.overall_tree.insert('', tk.END, values=row)
 
     def restrict_to_staff(self, staff_name: str) -> None:
-        """全体タブを隠し、個人タブを staff_name だけにする。概要タブは割り振りに使うため職員にも見せる"""
+        """全体・全体推移タブを隠し、個人タブを staff_name だけにする。概要タブは割り振りに使うため職員にも見せる"""
         self.restricted_staff = staff_name
         self.notebook.hide(self.overall_tab)
+        self.notebook.hide(self.trend_tab)
         self.staff_combobox.state(['disabled'])
         self.set_staff_names([staff_name])
 
@@ -202,10 +239,37 @@ class ResultView:
             self.staff_var.set(names[0] if names else '')
 
     def show_staff(self, staff_counts: StaffCounts) -> None:
-        self.staff_total_label.configure(text=constants.STAFF_TOTAL_FORMAT.format(
-            total=staff_counts.total, average=staff_counts.average))
+        self.staff_total_label.configure(text=constants.STAFF_TOTAL_FORMAT.format(total=staff_counts.total))
         fill_tree(self.department_tree, list(constants.STAFF_DEPARTMENT_COLUMNS),
                   [list(row) for row in staff_counts.by_department])
         fill_tree(self.document_tree, list(constants.STAFF_DOCUMENT_COLUMNS),
                   [list(row) for row in staff_counts.by_document], first_width=360)
         self.staff_chart.show(staff_figure(staff_counts))
+
+    def set_trend_departments(self, departments: list[str], selected: str) -> None:
+        """診療科のタブを作り直し、selected があればそのタブを選ぶ"""
+        notebook = self.trend_department_notebook
+        for frame in notebook.winfo_children():
+            frame.destroy()
+        for department in departments:
+            notebook.add(ttk.Frame(notebook), text=department)
+        if selected in departments:
+            notebook.select(departments.index(selected))
+
+    def selected_trend_department(self) -> str:
+        notebook = self.trend_department_notebook
+        return notebook.tab(notebook.select(), 'text') if notebook.select() else ''
+
+    def show_trend(self, trend: TrendCounts, department: str) -> None:
+        rows = trend.table_rows
+        self.trend_title.configure(text=constants.TREND_TITLE_FORMAT.format(
+            department=department, first=rows[0][0], last=rows[-1][0], total=sum(cast(int, row[-1]) for row in rows)))
+        # 本日より後の月は空欄にする
+        fill_tree(self.trend_tree, [constants.TREND_CORNER_HEADER, *trend.month_labels, constants.TOTAL_ROW_LABEL],
+                  [['' if value is None else value for value in row] for row in rows], first_width=80)
+        self.trend_chart.show(trend_figure(trend, department))
+
+    def show_trend_error(self, message: str) -> None:
+        self.trend_title.configure(text=message)
+        self.trend_tree.delete(*self.trend_tree.get_children())
+        self.trend_chart.clear()

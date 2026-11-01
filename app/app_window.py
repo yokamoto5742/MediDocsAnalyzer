@@ -38,6 +38,7 @@ class MedicalDocsAnalyzerGUI:
         self._setup_gui()
         self.backup_database()
         self.refresh_overview()
+        self.load_trend()
         self.analyze_saved_period()
 
     def _setup_gui(self) -> None:
@@ -49,7 +50,8 @@ class MedicalDocsAnalyzerGUI:
         self._setup_date_frame(main_frame)
         self._setup_buttons(main_frame)
 
-        self.result_view = ResultView(self.root, self.export_overall, self.export_staff, self.show_staff_summary)
+        self.result_view = ResultView(self.root, self.export_overall, self.export_staff, self.show_staff_summary,
+                                      self.export_trend, self.refresh_trend)
         self.result_view.notebook.grid(row=0, column=1, sticky=tk.NSEW, padx=(0, 10), pady=10)
         self._apply_permissions()
 
@@ -258,6 +260,72 @@ class MedicalDocsAnalyzerGUI:
             self.analyzer.export_staff(staff_name, *self.period)
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
+
+    def load_trend(self) -> None:
+        """全体推移の診療科タブを作り、前回選んだ年と診療科で表示する。既定は前年と今年(年度)の合計"""
+        if self.result_view.restricted_staff is not None:
+            return
+        today = date.today()
+        # 4月始まりなら 1〜3月は前年の年度にする
+        this_year = today.year - (today.month < self.year_start_month_var.get())
+        view = self.result_view
+        view.trend_start_year_var.set(self.config.get('Trend', 'start_year', fallback=str(this_year - 1)))
+        view.trend_end_year_var.set(self.config.get('Trend', 'end_year', fallback=str(this_year)))
+        try:
+            departments = [department.name for department in self.analyzer.list_departments()]
+        except Exception as e:
+            view.show_trend_error(constants.TREND_ERROR_FORMAT.format(error=e))
+            return
+        view.set_trend_departments([constants.TOTAL_ROW_LABEL, *departments],
+                                   self.config.get('Trend', 'department', fallback=constants.TOTAL_ROW_LABEL))
+        self.refresh_trend()
+
+    def _trend_years(self) -> tuple[int, int] | None:
+        """全体推移の開始年と終了年。正しくなければ None"""
+        start_text = self.result_view.trend_start_year_var.get().strip()
+        end_text = self.result_view.trend_end_year_var.get().strip()
+        if not (start_text.isdigit() and end_text.isdigit()) or int(start_text) > int(end_text):
+            return None
+        return int(start_text), int(end_text)
+
+    def refresh_trend(self) -> None:
+        """全体推移を DB から集計し直し、選んだ年と診療科を保存する。タブを切り替えるたびに呼ぶため、失敗はタブ内に出す"""
+        department = self.result_view.selected_trend_department()
+        if not department:
+            return
+        years = self._trend_years()
+        if years is None:
+            self.result_view.show_trend_error(constants.INVALID_YEARS_MESSAGE)
+            return
+        try:
+            self._save_trend_settings(department, *years)
+            trend = self.analyzer.trend_summary(department, *years, self.year_start_month_var.get(), date.today())
+            self.result_view.show_trend(trend, department)
+        except Exception as e:
+            self.result_view.show_trend_error(constants.TREND_ERROR_FORMAT.format(error=e))
+
+    def export_trend(self) -> None:
+        department = self.result_view.selected_trend_department()
+        years = self._trend_years()
+        if not department or years is None:
+            messagebox.showerror(constants.ERROR_TITLE, constants.INVALID_YEARS_MESSAGE)
+            return
+        try:
+            self.analyzer.export_trend(department, *years, self.year_start_month_var.get(), date.today())
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
+
+    def _save_trend_settings(self, department: str, start_year: int, end_year: int) -> None:
+        # 設定画面での変更を消さないよう、保存直前に読み直す
+        self.config = load_config()
+        if not self.config.has_section('Trend'):
+            self.config.add_section('Trend')
+        self.config['Trend'].update({
+            'start_year': str(start_year),
+            'end_year': str(end_year),
+            'department': department,
+        })
+        save_config(self.config)
 
     def _save_analysis_settings(self, start_date: date, end_date: date) -> None:
         # 設定画面での変更を消さないよう、保存直前に読み直す

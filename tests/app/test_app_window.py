@@ -9,13 +9,14 @@ import pytest
 
 from app import constants
 from app.app_window import MedicalDocsAnalyzerGUI
-from service.service_data_analyzer import DocumentCounts, StaffCounts
+from service.service_data_analyzer import DocumentCounts, StaffCounts, TrendCounts
 from service.service_excel_reader import Document, Draft, NoDataError, RowError, SourceData
-from service.service_master import ADMIN_ROLE, Staff
+from service.service_master import ADMIN_ROLE, Department, Staff
 from service.service_medical_docs_analyzer import ImportPlan, OverallSummary, Overview
-from utils.config_manager import load_config
+from utils.config_manager import load_config, save_config
 
 DRAFT = Draft(date(2025, 4, 1), None, '診断書', '内科', '佐藤', '', '1')
+TREND = TrendCounts(4, [(2025, [1] * 12)])
 ANALYZE_SAVED_PERIOD = MedicalDocsAnalyzerGUI.analyze_saved_period
 
 
@@ -40,6 +41,8 @@ def messagebox() -> Iterator[MagicMock]:
 def gui(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> Iterator[MedicalDocsAnalyzerGUI]:
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         analyzer_class.return_value.load_overview.return_value = make_overview([])
+        analyzer_class.return_value.list_departments.return_value = [Department('内科', 1), Department('外科', 2)]
+        analyzer_class.return_value.trend_summary.return_value = TREND
         yield MedicalDocsAnalyzerGUI(root)
 
 
@@ -187,7 +190,7 @@ def make_summary() -> OverallSummary:
 
 
 def make_staff_counts(name: str) -> StaffCounts:
-    return StaffCounts(name, 2, 1.5, [('内科', 2)], [('診断書', 2)], [('2025/10', 2), ('2025/11', 0)])
+    return StaffCounts(name, 2, [('内科', 2)], [('診断書', 2)], [('2025/10', 2), ('2025/11', 0)])
 
 
 def test_start_analysis_shows_results_and_saves_settings(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
@@ -358,3 +361,90 @@ def test_analyze_saved_period_skips_without_saved_dates(gui: MedicalDocsAnalyzer
         ANALYZE_SAVED_PERIOD(gui)
 
     start_analysis.assert_not_called()
+
+
+def fiscal_year(today: date) -> int:
+    return today.year - (today.month < 4)
+
+
+def test_init_shows_trend_of_last_two_years(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
+    this_year = fiscal_year(date.today())
+    view = gui.result_view
+
+    assert (view.trend_start_year_var.get(), view.trend_end_year_var.get()) == (str(this_year - 1), str(this_year))
+    notebook = view.trend_department_notebook
+    assert [notebook.tab(tab, 'text') for tab in notebook.tabs()] == ['合計', '内科', '外科']
+    analyzer.trend_summary.assert_called_once_with('合計', this_year - 1, this_year, 4, date.today())
+    assert len(view.trend_tree.get_children()) == 1
+    assert load_config()['Trend']['department'] == '合計'
+
+
+def test_init_restores_saved_trend_settings(config_path: Path, root: tk.Tk) -> None:
+    config = load_config()
+    config['Trend'] = {'start_year': '2022', 'end_year': '2024', 'department': '外科'}
+    save_config(config)
+
+    with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
+        analyzer_class.return_value.list_departments.return_value = [Department('内科', 1), Department('外科', 2)]
+        analyzer_class.return_value.trend_summary.return_value = TREND
+        gui = MedicalDocsAnalyzerGUI(root)
+
+    assert gui.result_view.selected_trend_department() == '外科'
+    analyzer_class.return_value.trend_summary.assert_called_once_with('外科', 2022, 2024, 4, date.today())
+
+
+def test_refresh_trend_saves_years_and_department(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
+    gui.result_view.trend_start_year_var.set('2021')
+    gui.result_view.trend_end_year_var.set('2023')
+    gui.result_view.trend_department_notebook.select(1)
+
+    gui.refresh_trend()
+
+    analyzer.trend_summary.assert_called_with('内科', 2021, 2023, 4, date.today())
+    trend_config = load_config()['Trend']
+    assert (trend_config['start_year'], trend_config['end_year'], trend_config['department']) == (
+        '2021', '2023', '内科')
+
+
+@pytest.mark.parametrize(('start', 'end'), [('2026', '2025'), ('abc', '2025')])
+def test_refresh_trend_rejects_invalid_years(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                            messagebox: MagicMock, start: str, end: str) -> None:
+    analyzer.trend_summary.reset_mock()
+    gui.result_view.trend_start_year_var.set(start)
+    gui.result_view.trend_end_year_var.set(end)
+
+    gui.refresh_trend()
+    gui.export_trend()
+
+    analyzer.trend_summary.assert_not_called()
+    assert gui.result_view.trend_title.cget('text') == constants.INVALID_YEARS_MESSAGE
+    messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, constants.INVALID_YEARS_MESSAGE)
+    analyzer.export_trend.assert_not_called()
+
+
+def test_refresh_trend_shows_error_in_tab(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                          messagebox: MagicMock) -> None:
+    analyzer.trend_summary.side_effect = PermissionError('locked')
+
+    gui.refresh_trend()
+
+    assert gui.result_view.trend_title.cget('text') == constants.TREND_ERROR_FORMAT.format(error='locked')
+    messagebox.showerror.assert_not_called()
+
+
+def test_export_trend_uses_selected_department(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
+    gui.result_view.trend_start_year_var.set('2024')
+    gui.result_view.trend_end_year_var.set('2025')
+    gui.result_view.trend_department_notebook.select(2)
+
+    gui.export_trend()
+
+    analyzer.export_trend.assert_called_once_with('外科', 2024, 2025, 4, date.today())
+
+
+def test_staff_user_does_not_see_trend(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
+    with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
+        gui = MedicalDocsAnalyzerGUI(root, Staff(2, '花﨑', 2, emr_id='S01'))
+
+    assert gui.result_view.notebook.tab(gui.result_view.trend_tab, 'state') == 'hidden'
+    analyzer_class.return_value.trend_summary.assert_not_called()

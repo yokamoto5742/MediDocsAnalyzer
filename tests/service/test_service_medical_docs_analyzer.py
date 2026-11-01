@@ -264,6 +264,24 @@ def test_export_staff_limits_documents_to_top(config_path: Path, monkeypatch: py
     staff_summary.assert_called_once_with('花﨑', date(2025, 4, 1), date(2025, 4, 30), TOP_DOCUMENT_COUNT)
 
 
+def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook, startfile: MagicMock) -> None:
+    tmp_path = config_path.parent
+    make_workbook(tmp_path / 'source.xlsx', [
+        ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
+        ['2025/04/01', 2, '山田', '診断書', '外科', '佐藤', None, '2025/05/02', '花﨑'],
+    ])
+    analyzer = MedicalDocsAnalyzer()
+    analyzer.apply_import(analyzer.prepare_source_import())
+
+    total = analyzer.trend_summary('合計', 2025, 2025, 4, date(2026, 11, 1))
+    surgery = analyzer.trend_summary('外科', 2025, 2025, 4, date(2026, 11, 1))
+    output_path = analyzer.export_trend('外科', 2025, 2025, 4, date(2026, 11, 1))
+
+    assert total.by_year == [(2025, [1, 1, *[0] * 10])]
+    assert surgery.by_year == [(2025, [0, 1, *[0] * 10])]
+    assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数推移_外科_2025-2025.xlsx'
+
+
 def test_run_analysis_raises_when_no_data_in_period(config_path: Path) -> None:
     with pytest.raises(NoDataError):
         MedicalDocsAnalyzer().run_analysis(date(2025, 4, 1), date(2025, 6, 30))

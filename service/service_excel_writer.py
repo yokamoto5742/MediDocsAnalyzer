@@ -4,14 +4,15 @@ from pathlib import Path
 from typing import cast
 
 from openpyxl import Workbook, load_workbook
-from openpyxl.chart import BarChart, Reference
+from openpyxl.chart import LineChart, Reference
 from openpyxl.styles import Font
 from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.worksheet.worksheet import Worksheet
 
-from service.service_data_analyzer import DocumentCounts, StaffCounts
+from service.service_data_analyzer import DocumentCounts, StaffCounts, TrendCounts
 
 TOTAL_LABEL = '合計'
+TREND_CORNER_LABEL = '件数'
 
 
 def write_counts(sheet: Worksheet, counts: DocumentCounts, staff_members: list[str],
@@ -55,7 +56,6 @@ def save_results(counts: DocumentCounts, staff_members: list[str], departments: 
     sheet['A1'] = (f'医療文書作成件数 {counts.first_date:%Y年%m月%d日}'
                    f'-{counts.last_date:%Y年%m月%d日}')
     write_counts(sheet, counts, staff_members, departments)
-    add_overall_chart(sheet, len(staff_members), departments)
     set_print_layout(sheet)
 
     return save_and_open(wb, output_dir,
@@ -84,9 +84,8 @@ def set_print_layout(sheet: Worksheet) -> None:
     sheet.page_setup.fitToHeight = 1
 
 
-def make_bar_chart(title: str, horizontal: bool) -> BarChart:
-    chart = BarChart()
-    chart.type = 'bar' if horizontal else 'col'
+def make_line_chart(title: str) -> LineChart:
+    chart = LineChart()
     chart.title = title
     chart.width = 24
     chart.height = 10
@@ -94,21 +93,6 @@ def make_bar_chart(title: str, horizontal: bool) -> BarChart:
     chart.x_axis.delete = False
     chart.y_axis.delete = False
     return chart
-
-
-def add_overall_chart(sheet: Worksheet, staff_count: int, departments: list[str]) -> None:
-    """担当者ごとの件数を診療科で積み上げた横棒グラフを、表の下に置く"""
-    chart = make_bar_chart('担当者別件数', horizontal=True)
-    chart.grouping = 'stacked'
-    chart.overlap = 100
-    # 表と同じく上から担当者を並べる
-    chart.x_axis.scaling.orientation = 'maxMin'
-    for column_index, department in enumerate(departments, start=2):
-        if department != TOTAL_LABEL:
-            chart.add_data(Reference(sheet, min_col=column_index, min_row=2, max_row=staff_count + 2),
-                           titles_from_data=True)
-    chart.set_categories(Reference(sheet, min_col=1, min_row=3, max_row=staff_count + 2))
-    sheet.add_chart(chart, f'A{staff_count + 5}')
 
 
 def write_table(sheet: Worksheet, row: int, column: int, headers: tuple[str, str],
@@ -130,8 +114,6 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
     sheet['A1'].font = Font(bold=True, size=14)
     sheet['A2'] = TOTAL_LABEL
     sheet['B2'] = staff_counts.total
-    sheet['D2'] = '担当者1人あたりの平均'
-    sheet['E2'] = round(staff_counts.average, 1)
 
     write_table(sheet, 4, 1, ('診療科', '件数'), staff_counts.by_department)
     write_table(sheet, 4, 4, ('文書名', '件数'), staff_counts.by_document)
@@ -139,7 +121,7 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
     for column, width in (('A', 14), ('D', 48), ('G', 10)):
         sheet.column_dimensions[column].width = width
 
-    chart = make_bar_chart(f'{name} 月別件数', horizontal=False)
+    chart = make_line_chart(f'{name} 月別件数')
     chart.legend = None
     chart.add_data(Reference(sheet, min_col=8, min_row=4, max_row=4 + len(staff_counts.by_month)),
                    titles_from_data=True)
@@ -150,3 +132,35 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
 
     return save_and_open(wb, output_dir,
                          f'医療文書作成件数_{name}_{start_date:%Y%m%d}-{end_date:%Y%m%d}.xlsx')
+
+
+def save_trend_results(trend: TrendCounts, department: str, output_dir: str) -> str:
+    """年(年度)ごとの月別件数の表と、1 年 1 本の折れ線グラフを新しいブックに書いて保存する"""
+    wb = Workbook()
+    sheet = cast(Worksheet, wb.active)
+    sheet.title = '推移'
+    first_year, last_year = trend.by_year[0][0], trend.by_year[-1][0]
+    sheet['A1'] = (f'医療文書作成件数推移(医師依頼日) {department} '
+                   f'{trend.year_label(first_year)}-{trend.year_label(last_year)}')
+    sheet['A1'].font = Font(bold=True, size=14)
+
+    headers = [TREND_CORNER_LABEL, *trend.month_labels, TOTAL_LABEL]
+    for column_index, header in enumerate(headers, start=1):
+        sheet.cell(row=3, column=column_index, value=header).font = Font(bold=True)
+    rows = trend.table_rows
+    for row_index, row in enumerate(rows, start=4):
+        for column_index, value in enumerate(row, start=1):
+            sheet.cell(row=row_index, column=column_index, value=value)
+    sheet.column_dimensions['A'].width = 12
+
+    chart = make_line_chart(f'{department} 月別件数')
+    # 1 行を 1 本の線にし、行の先頭(年の名前)を線の名前にする
+    chart.add_data(Reference(sheet, min_col=1, max_col=13, min_row=4, max_row=len(rows) + 3),
+                   titles_from_data=True, from_rows=True)
+    chart.set_categories(Reference(sheet, min_col=2, max_col=13, min_row=3))
+    assert chart.legend is not None
+    chart.legend.position = 'b'
+    sheet.add_chart(chart, f'A{len(rows) + 6}')
+    set_print_layout(sheet)
+
+    return save_and_open(wb, output_dir, f'医療文書作成件数推移_{department}_{first_year}-{last_year}.xlsx')

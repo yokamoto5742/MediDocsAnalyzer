@@ -10,11 +10,12 @@ from pathlib import Path
 from service import service_auth, service_master
 from service.service_auth import LoginResult
 from service.service_backup import backup_database_daily
-from service.service_data_analyzer import DocumentCounts, StaffCounts, count_documents, count_staff_documents
+from service.service_data_analyzer import (DocumentCounts, StaffCounts, TrendCounts, count_documents,
+                                           count_staff_documents, count_trend)
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
 from service.service_excel_reader import Draft, NoDataError, RowError, SourceData, read_documents
-from service.service_excel_writer import TOTAL_LABEL, save_results, save_staff_results
+from service.service_excel_writer import TOTAL_LABEL, save_results, save_staff_results, save_trend_results
 from service.service_master import Department, Staff
 from utils.config_manager import load_config
 
@@ -220,6 +221,19 @@ class MedicalDocsAnalyzer:
         output_dir = load_config()['PATHS']['output_dir']
         return save_staff_results(self.staff_summary(staff_name, start_date, end_date, TOP_DOCUMENT_COUNT),
                                   start_date, end_date, output_dir)
+
+    def trend_summary(self, department: str, start_year: int, end_year: int, year_start_month: int,
+                      today: date) -> TrendCounts:
+        """DB の文書を医師依頼日で年(年度)ごとの月別に数える。department が合計なら全診療科"""
+        with self._open_database() as connection:
+            return count_trend(connection, None if department == TOTAL_LABEL else department,
+                               start_year, end_year, year_start_month, today)
+
+    def export_trend(self, department: str, start_year: int, end_year: int, year_start_month: int,
+                     today: date) -> str:
+        """全体推移を Excel に保存し、保存先のパスを返す"""
+        trend = self.trend_summary(department, start_year, end_year, year_start_month, today)
+        return save_trend_results(trend, department, load_config()['PATHS']['output_dir'])
 
     def run_analysis(self, start_date: date, end_date: date) -> str:
         """期間内の文書を集計して Excel に保存し、保存先のパスを返す"""

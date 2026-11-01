@@ -7,8 +7,8 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from service import service_excel_writer
-from service.service_data_analyzer import DocumentCounts, StaffCounts
-from service.service_excel_writer import save_results, save_staff_results
+from service.service_data_analyzer import DocumentCounts, StaffCounts, TrendCounts
+from service.service_excel_writer import save_results, save_staff_results, save_trend_results
 
 TITLE = '医療文書作成件数'
 STAFF_NAME = '花﨑'
@@ -52,14 +52,14 @@ def test_save_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ]
     startfile.assert_called_once_with(tmp_path / 'output')
     sheet = active_sheet(output_path)
-    assert len(getattr(sheet, '_charts')) == 1
+    assert getattr(sheet, '_charts') == []
     assert sheet.page_setup.orientation == 'landscape'
 
 
 def test_save_staff_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     startfile = MagicMock()
     monkeypatch.setattr(service_excel_writer.os, 'startfile', startfile, raising=False)
-    staff_counts = StaffCounts(STAFF_NAME, 3, 1.25, [(DEPARTMENT, 3)], [(DOCUMENT, 3)],
+    staff_counts = StaffCounts(STAFF_NAME, 3, [(DEPARTMENT, 3)], [(DOCUMENT, 3)],
                                [('2025/04', 2), ('2025/05', 1)])
 
     output_path = save_staff_results(staff_counts, date(2025, 4, 1), date(2025, 5, 31), str(tmp_path / 'output'))
@@ -67,9 +67,29 @@ def test_save_staff_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert Path(output_path).name == f'{TITLE}_{STAFF_NAME}_20250401-20250531.xlsx'
     sheet = active_sheet(output_path)
     assert sheet['B2'].value == 3
-    assert sheet['E2'].value == 1.2
+    assert (sheet['D2'].value, sheet['E2'].value) == (None, None)
     values = sheet_values(sheet)
     assert values[4][:8] == [DEPARTMENT, 3, None, DOCUMENT, 3, None, '2025/04', 2]
     assert values[5][6:8] == ['2025/05', 1]
-    assert len(getattr(sheet, '_charts')) == 1
+    assert chart_types(sheet) == ['lineChart']
     startfile.assert_called_once_with(tmp_path / 'output')
+
+
+def chart_types(sheet: Worksheet) -> list[str]:
+    return [chart.tagname for chart in getattr(sheet, '_charts')]
+
+
+def test_save_trend_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(service_excel_writer.os, 'startfile', MagicMock(), raising=False)
+    trend = TrendCounts(4, [(2024, [1] * 12), (2025, [2] * 12), (2026, [3, *[None] * 11])])
+
+    output_path = save_trend_results(trend, DEPARTMENT, str(tmp_path / 'output'))
+
+    assert Path(output_path).name == f'{TITLE}推移_{DEPARTMENT}_2024-2026.xlsx'
+    sheet = active_sheet(output_path)
+    values = sheet_values(sheet)
+    assert values[2] == ['件数', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月',
+                         '3月', '合計']
+    assert values[3:6] == [['2024年度', *[1] * 12, 12], ['2025年度', *[2] * 12, 24],
+                           ['2026年度', 3, *[None] * 11, 3]]
+    assert chart_types(sheet) == ['lineChart']

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from service.service_excel_reader import NoDataError
+from utils.date_period import get_period_range
 
 PERIOD_CONDITION = 'received_date BETWEEN ? AND ?'
 
@@ -21,10 +22,33 @@ class DocumentCounts:
 class StaffCounts:
     staff_name: str
     total: int
-    average: float  # 期間内に件数がある担当者 1 人あたりの件数
     by_department: list[tuple[str, int]]
     by_document: list[tuple[str, int]]
     by_month: list[tuple[str, int]]
+
+
+@dataclass
+class TrendCounts:
+    """年(年度)ごとの月別件数。本日より後の月は None"""
+    year_start_month: int
+    by_year: list[tuple[int, list[int | None]]]
+
+    @property
+    def year_header(self) -> str:
+        return '年' if self.year_start_month == 1 else '年度'
+
+    def year_label(self, year: int) -> str:
+        return f'{year}{self.year_header}'
+
+    @property
+    def month_labels(self) -> list[str]:
+        return [f'{(self.year_start_month - 1 + offset) % 12 + 1}月' for offset in range(12)]
+
+    @property
+    def table_rows(self) -> list[list[str | int | None]]:
+        """1 行が 1 年で、年の名前・12 か月の件数・合計を並べる"""
+        return [[self.year_label(year), *counts, sum(count for count in counts if count is not None)]
+                for year, counts in self.by_year]
 
 
 def period_parameters(start_date: date, end_date: date) -> tuple[str, str]:
@@ -84,15 +108,34 @@ def count_staff_documents(connection: sqlite3.Connection, staff_name: str, start
     month_counts = dict(connection.execute(
         f"SELECT strftime('%Y/%m', received_date), COUNT(*) FROM documents WHERE {condition}"
         ' GROUP BY 1', parameters).fetchall())
-    staff_count, all_total = connection.execute(
-        f'SELECT COUNT(DISTINCT staff_name), COUNT(*) FROM documents WHERE {PERIOD_CONDITION}',
-        period_parameters(start_date, end_date)).fetchone()
 
     return StaffCounts(
         staff_name=staff_name,
         total=sum(count for _, count in by_department),
-        average=all_total / staff_count if staff_count else 0.0,
         by_department=by_department,
         by_document=by_document,
         by_month=[(month, month_counts.get(month, 0)) for month in months_between(start_date, end_date)],
     )
+
+
+def count_trend(connection: sqlite3.Connection, department: str | None, start_year: int, end_year: int,
+                year_start_month: int, today: date) -> TrendCounts:
+    """医師依頼日で、年(年度)ごとに月別の件数を数える。department が None なら全診療科"""
+    first_day = get_period_range(start_year, '一年', year_start_month)[0]
+    last_day = get_period_range(end_year, '一年', year_start_month)[1]
+    condition = 'requested_date BETWEEN ? AND ?'
+    parameters = [first_day.isoformat(), last_day.isoformat()]
+    if department is not None:
+        condition += ' AND department = ?'
+        parameters.append(department)
+    month_counts = dict(connection.execute(
+        f"SELECT strftime('%Y/%m', requested_date), COUNT(*) FROM documents WHERE {condition} GROUP BY 1",
+        parameters).fetchall())
+
+    # 'YYYY/MM' は文字列のまま大小を比べられる
+    this_month = f'{today:%Y/%m}'
+    by_year: list[tuple[int, list[int | None]]] = []
+    for year in range(start_year, end_year + 1):
+        months = months_between(*get_period_range(year, '一年', year_start_month))
+        by_year.append((year, [None if month > this_month else month_counts.get(month, 0) for month in months]))
+    return TrendCounts(year_start_month, by_year)

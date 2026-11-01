@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from service.service_data_analyzer import count_documents, count_staff_documents, months_between
+from service.service_data_analyzer import count_documents, count_staff_documents, count_trend, months_between
 from service.service_database import connect, replace_documents_between
 from service.service_excel_reader import Document, NoDataError
 
@@ -54,7 +54,6 @@ def test_count_staff_documents(connection: sqlite3.Connection) -> None:
     counts = count_staff_documents(connection, '植田', date(2025, 8, 1), date(2025, 10, 31), document_limit=1)
 
     assert counts.total == 4
-    assert counts.average == 2.5
     assert counts.by_department == [('外科', 3), ('内科', 1)]
     assert counts.by_document == [('紹介状', 2)]
     assert counts.by_month == [('2025/08', 3), ('2025/09', 0), ('2025/10', 1)]
@@ -66,7 +65,39 @@ def test_count_staff_documents(connection: sqlite3.Connection) -> None:
 def test_count_staff_documents_without_data(connection: sqlite3.Connection) -> None:
     counts = count_staff_documents(connection, '植田', date(2026, 1, 1), date(2026, 1, 31), document_limit=10)
 
-    assert (counts.total, counts.average, counts.by_month) == (0, 0.0, [('2026/01', 0)])
+    assert (counts.total, counts.by_month) == (0, [('2026/01', 0)])
+
+
+def test_count_trend_uses_requested_date_by_fiscal_year() -> None:
+    connection = connect(':memory:')
+    replace_documents_between(connection, date(2024, 1, 1), date(2099, 12, 31), [
+        # 預り日ではなく医師依頼日で数える
+        Document(date(2025, 3, 20), date(2025, 4, 2), '診断書', '内科', '佐藤', '植田'),
+        Document(date(2025, 4, 3), date(2025, 4, 3), '診断書', '外科', '佐藤', '植田'),
+        Document(date(2026, 3, 1), date(2026, 3, 31), '診断書', '内科', '佐藤', '植田'),
+        Document(date(2026, 4, 1), date(2026, 4, 1), '診断書', '内科', '佐藤', '植田'),
+        Document(date(2024, 3, 1), date(2024, 3, 31), '診断書', '内科', '佐藤', '植田'),
+    ])
+
+    trend = count_trend(connection, '内科', 2025, 2026, 4, date(2026, 5, 15))
+
+    assert trend.month_labels[:3] == ['4月', '5月', '6月']
+    assert trend.by_year == [
+        (2025, [1, *[0] * 10, 1]),
+        (2026, [1, 0, *[None] * 10]),
+    ]
+    assert trend.table_rows[0][0] == '2025年度'
+    assert trend.table_rows[1][-1] == 1
+    total = count_trend(connection, None, 2025, 2025, 4, date(2026, 5, 15))
+    assert total.by_year == [(2025, [2, *[0] * 10, 1])]
+    connection.close()
+
+
+def test_count_trend_calendar_year() -> None:
+    trend = count_trend(connect(':memory:'), None, 2025, 2025, 1, date(2026, 1, 1))
+
+    assert (trend.year_header, trend.month_labels[0]) == ('年', '1月')
+    assert trend.by_year == [(2025, [0] * 12)]
 
 
 def test_count_documents_raises_when_no_data(connection: sqlite3.Connection) -> None:

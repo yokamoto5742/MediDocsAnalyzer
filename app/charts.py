@@ -1,8 +1,11 @@
+import math
+
 from matplotlib import rcParams
+from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
-from service.service_data_analyzer import StaffCounts
+from service.service_data_analyzer import StaffCounts, TrendCounts
 from service.service_medical_docs_analyzer import OverallSummary
 
 # 日本語を表示できるフォントを、Windows に入っている順に試す
@@ -30,17 +33,36 @@ def overall_figure(summary: OverallSummary) -> Figure:
     return figure
 
 
-def staff_figure(staff_counts: StaffCounts) -> Figure:
-    """1 人の担当者の月別件数を棒グラフにする"""
-    figure = Figure(figsize=FIGURE_SIZE, layout='constrained')
-    axes = figure.add_subplot()
-    months = [month for month, _ in staff_counts.by_month]
-    counts = [count for _, count in staff_counts.by_month]
-    axes.bar(months, counts)
-    axes.set_title(f'{staff_counts.staff_name} 月別件数')
+def set_count_axis(axes: Axes, counts: list[int]) -> None:
     axes.set_ylabel('件数')
     # 件数が 0 だけでも軸が負にならないよう、0 から始めて目盛りを整数にする
     axes.set_ylim(0, max(counts, default=0) * 1.1 or 1)
     axes.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+
+def staff_figure(staff_counts: StaffCounts) -> Figure:
+    """1 人の担当者の月別件数を折れ線グラフにする"""
+    figure = Figure(figsize=FIGURE_SIZE, layout='constrained')
+    axes = figure.add_subplot()
+    months = [month for month, _ in staff_counts.by_month]
+    counts = [count for _, count in staff_counts.by_month]
+    axes.plot(months, counts, marker='o')
+    axes.set_title(f'{staff_counts.staff_name} 月別件数')
+    set_count_axis(axes, counts)
     axes.tick_params(axis='x', labelrotation=45)
+    return figure
+
+
+def trend_figure(trend: TrendCounts, department: str) -> Figure:
+    """年(年度)ごとの月別件数を、1 年 1 本の折れ線グラフにする。本日より後の月は線を引かない"""
+    figure = Figure(figsize=FIGURE_SIZE, layout='constrained')
+    axes = figure.add_subplot()
+    for year, counts in trend.by_year:
+        axes.plot(trend.month_labels, [math.nan if count is None else count for count in counts],
+                  label=trend.year_label(year))
+    axes.set_title(f'{department} 月別件数')
+    set_count_axis(axes, [count for _, counts in trend.by_year for count in counts if count is not None])
+    # 凡例は年を横に並べてグラフの下に置く
+    axes.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncols=max(len(trend.by_year), 1),
+                fontsize='small', frameon=False)
     return figure
