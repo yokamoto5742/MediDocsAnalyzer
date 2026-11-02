@@ -1,10 +1,12 @@
 import tkinter as tk
+from dataclasses import dataclass
 from datetime import date
 from tkinter import messagebox, ttk
 
 from tkcalendar import DateEntry
 
 from app import __version__, constants
+from app.date_entry import make_date_entry, read_date_range
 from app.import_errors_dialog import ImportErrorsDialog
 from app.login_dialog import ChangePasswordDialog
 from app.master_dialog import MasterDialog
@@ -15,11 +17,29 @@ from service.service_excel_reader import Draft, NoDataError
 from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
 from utils.config_manager import load_config, update_config
-from utils.date_period import PERIOD_NAMES, fiscal_year, get_period_range, parse_date
+from utils.date_period import PERIOD_NAMES, fiscal_year, get_period_range
 
 DEFAULT_YEAR_START_MONTH = 4
 TREND_SECTION = 'Trend'
 STAFF_TREND_SECTION = 'StaffTrend'
+
+
+@dataclass
+class TrendRequest:
+    """推移タブで選んだ内容"""
+    department: str  # 選択欄の表示。「合計」なら全診療科
+    staff_name: str | None  # None なら全担当者(全体推移)
+    start_date: date
+    end_date: date
+
+    @property
+    def department_filter(self) -> str | None:
+        """サービスへ渡す診療科。全診療科なら None"""
+        return None if self.department == constants.TOTAL_ROW_LABEL else self.department
+
+    @property
+    def subject(self) -> str:
+        return trend_subject(self.department, self.staff_name)
 
 
 class MedicalDocsAnalyzerGUI:
@@ -81,9 +101,7 @@ class MedicalDocsAnalyzerGUI:
     @staticmethod
     def _create_date_entry(parent: ttk.LabelFrame, row: int, label: str, initial_date: date) -> DateEntry:
         ttk.Label(parent, text=label).grid(row=row, column=0, padx=5, pady=5)
-        date_entry = DateEntry(parent, width=12, background='darkblue',
-                               foreground='white', borderwidth=2,
-                               locale='ja_JP', date_pattern='yyyy/mm/dd')
+        date_entry = make_date_entry(parent)
         date_entry.grid(row=row, column=1, sticky=tk.W, padx=5, pady=5)
         date_entry.set_date(initial_date)
         return date_entry
@@ -197,16 +215,10 @@ class MedicalDocsAnalyzerGUI:
         return plan
 
     def start_analysis(self) -> None:
-        # get_date() は手入力がフォーカスを外れるまで反映されないため、入力欄の文字列を読む
         try:
-            start_date = parse_date(self.start_date.get())
-            end_date = parse_date(self.end_date.get())
-        except ValueError:
-            messagebox.showerror(constants.ERROR_TITLE, constants.INVALID_DATE_MESSAGE)
-            return
-
-        if start_date > end_date:
-            messagebox.showerror(constants.ERROR_TITLE, constants.START_AFTER_END_MESSAGE)
+            start_date, end_date = read_date_range(self.start_date, self.end_date)
+        except ValueError as e:
+            messagebox.showerror(constants.ERROR_TITLE, str(e))
             return
 
         plan = self._import_source()
@@ -297,14 +309,14 @@ class MedicalDocsAnalyzerGUI:
         return [staff.name for staff in self.analyzer.list_staff()]
 
     @staticmethod
-    def _trend_range(panel: TrendPanel) -> tuple[date, date] | None:
-        """推移の開始日と終了日。正しくなければ None"""
-        try:
-            start_date = parse_date(panel.start_date.get())
-            end_date = parse_date(panel.end_date.get())
-        except ValueError:
+    def _read_trend_request(panel: TrendPanel) -> TrendRequest | None:
+        """推移タブの選択と範囲。個人推移で担当者がいなければ None。範囲が正しくなければ ValueError"""
+        department = panel.selected_department()
+        staff_name = panel.selected_staff()
+        # selected_staff() は、全体推移なら None、個人推移で担当者がいなければ '' を返す
+        if not department or staff_name == '':
             return None
-        return (start_date, end_date) if start_date <= end_date else None
+        return TrendRequest(department, staff_name, *read_date_range(panel.start_date, panel.end_date))
 
     def refresh_trend(self) -> None:
         self._refresh_trend_panel(self.result_view.trend, TREND_SECTION)
@@ -314,27 +326,20 @@ class MedicalDocsAnalyzerGUI:
 
     def _refresh_trend_panel(self, panel: TrendPanel, section: str) -> None:
         """推移を DB から集計し直し、選んだ範囲・診療科・氏名を保存する。選ぶたびに呼ぶため、失敗はタブ内に出す"""
-        department = panel.selected_department()
-        staff_name = panel.selected_staff()
-        # 個人推移で担当者がいなければ何もしない
-        if not department or staff_name == '':
-            return
-        trend_range = self._trend_range(panel)
-        if trend_range is None:
+        try:
+            request = self._read_trend_request(panel)
+        except ValueError:
             panel.show_error(constants.INVALID_TREND_RANGE_MESSAGE)
             return
+        if request is None:
+            return
         try:
-            self._save_trend_settings(section, department, staff_name, *trend_range)
-            trend = self.analyzer.trend_summary(self._department_filter(department), *trend_range,
-                                                self.year_start_month_var.get(), date.today(), staff_name)
-            panel.show(trend, trend_subject(department, staff_name))
+            self._save_trend_settings(section, request)
+            trend = self.analyzer.trend_summary(request.department_filter, request.start_date, request.end_date,
+                                                self.year_start_month_var.get(), date.today(), request.staff_name)
+            panel.show(trend, request.subject)
         except Exception as e:
             panel.show_error(constants.TREND_ERROR_FORMAT.format(name=panel.name, error=e))
-
-    @staticmethod
-    def _department_filter(department: str) -> str | None:
-        """診療科の選択欄の「合計」は、全診療科(None)にしてサービスへ渡す"""
-        return None if department == constants.TOTAL_ROW_LABEL else department
 
     def export_trend(self) -> None:
         self._export_trend_panel(self.result_view.trend)
@@ -343,23 +348,26 @@ class MedicalDocsAnalyzerGUI:
         self._export_trend_panel(self.result_view.staff_trend)
 
     def _export_trend_panel(self, panel: TrendPanel) -> None:
-        department = panel.selected_department()
-        staff_name = panel.selected_staff()
-        trend_range = self._trend_range(panel)
-        if not department or staff_name == '' or trend_range is None:
+        try:
+            request = self._read_trend_request(panel)
+        except ValueError:
+            request = None
+        if request is None:
             messagebox.showerror(constants.ERROR_TITLE, constants.INVALID_TREND_RANGE_MESSAGE)
             return
         try:
-            self.analyzer.export_trend(trend_subject(department, staff_name), self._department_filter(department),
-                                       *trend_range, self.year_start_month_var.get(), date.today(), staff_name)
+            self.analyzer.export_trend(request.subject, request.department_filter, request.start_date,
+                                       request.end_date, self.year_start_month_var.get(), date.today(),
+                                       request.staff_name)
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
-    def _save_trend_settings(self, section: str, department: str, staff_name: str | None, start_date: date,
-                             end_date: date) -> None:
-        values = {'start_date': start_date.isoformat(), 'end_date': end_date.isoformat(), 'department': department}
-        if staff_name is not None:
-            values['staff_name'] = staff_name
+    @staticmethod
+    def _save_trend_settings(section: str, request: TrendRequest) -> None:
+        values = {'start_date': request.start_date.isoformat(), 'end_date': request.end_date.isoformat(),
+                  'department': request.department}
+        if request.staff_name is not None:
+            values['staff_name'] = request.staff_name
         # 旧版の開始年・終了年は消す
         update_config({section: values}, replace=True)
 

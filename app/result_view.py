@@ -9,6 +9,7 @@ from tkcalendar import DateEntry
 
 from app import constants
 from app.charts import overall_figure, staff_figure, trend_figure
+from app.date_entry import make_date_entry
 from service.service_data_analyzer import OverallSummary, StaffCounts, TrendCounts
 from service.service_excel_reader import Draft
 from service.service_medical_docs_analyzer import DraftStatus, Overview, draft_status
@@ -110,8 +111,7 @@ class TrendPanel:
     @staticmethod
     def _create_date_entry(parent: ttk.Frame, on_changed: Callable[[], None]) -> DateEntry:
         """カレンダーで選んだときと、手入力して Enter を押したときに表示し直す"""
-        date_entry = DateEntry(parent, width=12, background='darkblue', foreground='white', borderwidth=2,
-                               locale='ja_JP', date_pattern='yyyy/mm/dd')
+        date_entry = make_date_entry(parent)
         date_entry.pack(side=tk.LEFT)
         date_entry.bind('<<DateEntrySelected>>', lambda _event: on_changed())
         date_entry.bind('<Return>', lambda _event: on_changed())
