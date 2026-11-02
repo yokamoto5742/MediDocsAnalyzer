@@ -68,17 +68,15 @@ class MedicalDocsAnalyzerGUI:
         self.result_view.restrict_to_staff(self.user.name)
 
     def _setup_date_frame(self, parent: ttk.Frame) -> None:
-        date_frame = ttk.LabelFrame(parent, text="分析期間", padding="5")
+        date_frame = ttk.LabelFrame(parent, text=constants.ANALYSIS_PERIOD_LABEL, padding="5")
         date_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
 
         saved_start_date, saved_end_date = self._load_saved_dates()
         year_start_month = self.config.getint('Analysis', 'year_start_month', fallback=DEFAULT_YEAR_START_MONTH)
-        # 4月始まりなら 1〜3月は前年の年度として表示する
-        initial_year = saved_start_date.year - (saved_start_date.month < year_start_month)
-        self._setup_period_selector(date_frame, initial_year, year_start_month)
+        self._setup_period_selector(date_frame, fiscal_year(saved_start_date, year_start_month), year_start_month)
 
-        self.start_date = self._create_date_entry(date_frame, 3, "開始日", saved_start_date)
-        self.end_date = self._create_date_entry(date_frame, 4, "終了日", saved_end_date)
+        self.start_date = self._create_date_entry(date_frame, 3, constants.START_DATE_LABEL, saved_start_date)
+        self.end_date = self._create_date_entry(date_frame, 4, constants.END_DATE_LABEL, saved_end_date)
 
     @staticmethod
     def _create_date_entry(parent: ttk.LabelFrame, row: int, label: str, initial_date: date) -> DateEntry:
@@ -98,7 +96,7 @@ class MedicalDocsAnalyzerGUI:
 
     def _setup_period_selector(self, date_frame: ttk.LabelFrame, initial_year: int,
                                year_start_month: int) -> None:
-        ttk.Label(date_frame, text="年").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(date_frame, text=constants.YEAR_LABEL).grid(row=0, column=0, padx=5, pady=5)
         self.year_var = tk.StringVar(value=str(initial_year))
         ttk.Spinbox(date_frame, from_=2000, to=2100, width=6, textvariable=self.year_var,
                     command=self._apply_period).grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
@@ -107,11 +105,11 @@ class MedicalDocsAnalyzerGUI:
         year_start_frame = ttk.Frame(date_frame)
         year_start_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W)
         for column, month in enumerate((1, 4)):
-            ttk.Radiobutton(year_start_frame, text=f"{month}月始まり", value=month,
+            ttk.Radiobutton(year_start_frame, text=constants.YEAR_START_MONTH_FORMAT.format(month=month), value=month,
                             variable=self.year_start_month_var,
                             command=self._apply_period).grid(row=0, column=column, padx=5)
 
-        ttk.Label(date_frame, text="期間").grid(row=2, column=0, padx=5, pady=5)
+        ttk.Label(date_frame, text=constants.PERIOD_LABEL).grid(row=2, column=0, padx=5, pady=5)
         self.period_var = tk.StringVar()
         period_combobox = ttk.Combobox(date_frame, width=10, state='readonly',
                                        values=PERIOD_NAMES, textvariable=self.period_var)
@@ -131,7 +129,7 @@ class MedicalDocsAnalyzerGUI:
         self.end_date.set_date(end_date)
 
     def _setup_buttons(self, parent: ttk.Frame) -> None:
-        ttk.Button(parent, text="集計開始", command=self.start_analysis).grid(
+        ttk.Button(parent, text=constants.START_ANALYSIS_BUTTON_LABEL, command=self.start_analysis).grid(
             row=2, column=0, columnspan=2, pady=10)
         master_button = ttk.Button(parent, text=constants.MASTER_BUTTON_LABEL, command=self.open_master)
         master_button.grid(row=3, column=0, columnspan=2, pady=5)
@@ -142,7 +140,7 @@ class MedicalDocsAnalyzerGUI:
         if self.user is not None:
             ttk.Button(parent, text=constants.CHANGE_PASSWORD_BUTTON_LABEL, command=self.change_password).grid(
                 row=6, column=0, columnspan=2, pady=5)
-        ttk.Button(parent, text="閉じる", command=self.root.quit).grid(
+        ttk.Button(parent, text=constants.CLOSE_BUTTON_LABEL, command=self.root.quit).grid(
             row=7, column=0, columnspan=2, pady=5)
         self.admin_buttons = [load_button, master_button, settings_button]
 

@@ -5,6 +5,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
+from app import constants
 from service.service_data_analyzer import StaffCounts, TrendCounts
 from service.service_medical_docs_analyzer import OverallSummary
 
@@ -26,7 +27,7 @@ def overall_figure(summary: OverallSummary) -> Figure:
         if any(widths):
             axes.barh(staff_members, widths, left=lefts, label=department)
             lefts = [left + width for left, width in zip(lefts, widths)]
-    axes.set_xlabel('件数')
+    axes.set_xlabel(constants.COUNT_AXIS_LABEL)
     if axes.get_legend_handles_labels()[0]:
         # 棒に重ならないよう、凡例はグラフの右外に置く
         axes.legend(loc='upper left', bbox_to_anchor=(1.01, 1), fontsize='small')
@@ -34,7 +35,7 @@ def overall_figure(summary: OverallSummary) -> Figure:
 
 
 def set_count_axis(axes: Axes, counts: list[int]) -> None:
-    axes.set_ylabel('件数')
+    axes.set_ylabel(constants.COUNT_AXIS_LABEL)
     # 件数が 0 だけでも軸が負にならないよう、0 から始めて目盛りを整数にする
     axes.set_ylim(0, max(counts, default=0) * 1.1 or 1)
     axes.yaxis.set_major_locator(MaxNLocator(integer=True))
@@ -47,7 +48,7 @@ def staff_figure(staff_counts: StaffCounts) -> Figure:
     months = [month for month, _ in staff_counts.by_month]
     counts = [count for _, count in staff_counts.by_month]
     axes.plot(months, counts, marker='o')
-    axes.set_title(f'{staff_counts.staff_name} 月別件数')
+    axes.set_title(constants.MONTHLY_COUNT_TITLE_FORMAT.format(subject=staff_counts.staff_name))
     set_count_axis(axes, counts)
     axes.tick_params(axis='x', labelrotation=45)
     return figure
@@ -65,7 +66,7 @@ def trend_figure(trend: TrendCounts, subject: str) -> Figure:
     # 値の無い月も軸から外れないよう、12 か月の目盛りと範囲を固定する
     axes.set_xticks(month_positions, trend.month_labels)
     axes.set_xlim(-0.5, len(trend.month_labels) - 0.5)
-    axes.set_title(f'{subject} 月別件数')
+    axes.set_title(constants.MONTHLY_COUNT_TITLE_FORMAT.format(subject=subject))
     set_count_axis(axes, [count for _, counts in trend.by_year for count in counts if count is not None])
     # 凡例は年を横に並べてグラフの下に置く
     axes.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncols=max(len(trend.by_year), 1),
