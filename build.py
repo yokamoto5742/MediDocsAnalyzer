@@ -4,7 +4,7 @@ import subprocess
 def build_executable():
     subprocess.run([
         "pyinstaller",
-        "--name=app_name",
+        "--name=MediDocsAnalyzer",
         "--windowed",
         "--add-data", "utils/config.ini;.",
         "main.py"
