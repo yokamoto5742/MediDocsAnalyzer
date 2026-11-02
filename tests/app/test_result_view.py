@@ -65,7 +65,7 @@ def test_tabs_are_overview_overall_staff_trend(root: tk.Tk) -> None:
     view = make_view(root)
 
     assert [view.notebook.tab(tab, 'text') for tab in view.notebook.tabs()] == [
-        '概要', '全体', '個人', '全体推移', '個人推移']
+        '概要', '全体', '全体推移', '個人', '個人推移']
     assert view.notebook.select() == str(view.overview_tab)
 
 
