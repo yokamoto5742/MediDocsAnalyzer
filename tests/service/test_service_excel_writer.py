@@ -1,12 +1,9 @@
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock
 
-import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from service import service_excel_writer
 from service.service_data_analyzer import DocumentCounts, OverallSummary, StaffCounts, TrendCounts
 from service.service_excel_writer import save_results, save_staff_results, save_trend_results
 
@@ -26,9 +23,7 @@ def sheet_values(sheet: Worksheet) -> list[list[object]]:
     return [list(row) for row in sheet.iter_rows(values_only=True)]
 
 
-def test_save_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    startfile = MagicMock()
-    monkeypatch.setattr(service_excel_writer.os, 'startfile', startfile, raising=False)
+def test_save_results(tmp_path: Path) -> None:
     template_path = tmp_path / 'template.xlsx'
     Workbook().save(template_path)
     counts = DocumentCounts(
@@ -50,15 +45,12 @@ def test_save_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ['花﨑', 1, 0, 1],
         ['合計', 9, 3, 1],
     ]
-    startfile.assert_called_once_with(tmp_path / 'output')
     sheet = active_sheet(output_path)
     assert getattr(sheet, '_charts') == []
     assert sheet.page_setup.orientation == 'landscape'
 
 
-def test_save_staff_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    startfile = MagicMock()
-    monkeypatch.setattr(service_excel_writer.os, 'startfile', startfile, raising=False)
+def test_save_staff_results(tmp_path: Path) -> None:
     staff_counts = StaffCounts(STAFF_NAME, 3, [(DEPARTMENT, 3)], [(DOCUMENT, 3)],
                                [('2025/04', 2), ('2025/05', 1)])
 
@@ -72,15 +64,13 @@ def test_save_staff_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert values[4][:8] == [DEPARTMENT, 3, None, DOCUMENT, 3, None, '2025/04', 2]
     assert values[5][6:8] == ['2025/05', 1]
     assert chart_types(sheet) == ['lineChart']
-    startfile.assert_called_once_with(tmp_path / 'output')
 
 
 def chart_types(sheet: Worksheet) -> list[str]:
     return [chart.tagname for chart in getattr(sheet, '_charts')]
 
 
-def test_save_trend_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(service_excel_writer.os, 'startfile', MagicMock(), raising=False)
+def test_save_trend_results(tmp_path: Path) -> None:
     trend = TrendCounts(4, [(2024, [1] * 12), (2025, [2, 0, *[2] * 10]), (2026, [3, *[None] * 11])])
 
     output_path = save_trend_results(trend, DEPARTMENT, date(2024, 4, 1), date(2026, 4, 30),

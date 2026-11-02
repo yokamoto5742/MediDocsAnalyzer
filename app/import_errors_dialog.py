@@ -1,11 +1,11 @@
 import csv
-import os
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 
 from app import constants
+from app.folder import open_folder_of
 from service.service_excel_reader import RowError
 from utils.config_manager import load_config
 
@@ -68,7 +68,7 @@ class ImportErrorsDialog:
                 writer = csv.writer(f)
                 writer.writerow(constants.ERROR_COLUMNS)
                 writer.writerows(error_rows(self.errors))
-            os.startfile(output_dir)
+            open_folder_of(path)
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.CSV_SAVE_ERROR_MESSAGE.format(error=e),
                                  parent=self.dialog)

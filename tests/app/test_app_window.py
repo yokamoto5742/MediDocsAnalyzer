@@ -40,7 +40,14 @@ def messagebox() -> Iterator[MagicMock]:
 
 
 @pytest.fixture
-def gui(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> Iterator[MedicalDocsAnalyzerGUI]:
+def open_folder_of() -> Iterator[MagicMock]:
+    with patch('app.app_window.open_folder_of') as mock:
+        yield mock
+
+
+@pytest.fixture
+def gui(config_path: Path, root: tk.Tk, messagebox: MagicMock,
+        open_folder_of: MagicMock) -> Iterator[MedicalDocsAnalyzerGUI]:
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         analyzer_class.return_value.load_overview.return_value = make_overview([])
         analyzer_class.return_value.list_departments.return_value = [Department('内科', 1), Department('外科', 2)]
@@ -291,7 +298,7 @@ def test_export_requires_analysis(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMo
 
 
 def test_export_uses_shown_period_and_staff(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                            messagebox: MagicMock) -> None:
+                                            messagebox: MagicMock, open_folder_of: MagicMock) -> None:
     gui.period = (date(2025, 4, 1), date(2025, 4, 30))
     gui.result_view.staff_var.set('花﨑')
 
@@ -300,6 +307,10 @@ def test_export_uses_shown_period_and_staff(gui: MedicalDocsAnalyzerGUI, analyze
 
     analyzer.run_analysis.assert_called_once_with(date(2025, 4, 1), date(2025, 4, 30))
     analyzer.export_staff.assert_called_once_with('花﨑', date(2025, 4, 1), date(2025, 4, 30))
+    # 保存したファイルのフォルダを開く
+    assert open_folder_of.call_args_list == [((analyzer.run_analysis.return_value,),),
+                                             ((analyzer.export_staff.return_value,),)]
+    messagebox.showerror.assert_not_called()
 
 
 def test_export_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:
@@ -400,7 +411,8 @@ def test_init_shows_staff_trend_for_first_staff(gui: MedicalDocsAnalyzerGUI, ana
         'staff_name': '植田'}
 
 
-def test_refresh_staff_trend_restores_and_saves_selection(config_path: Path, root: tk.Tk) -> None:
+def test_refresh_staff_trend_restores_and_saves_selection(config_path: Path, root: tk.Tk, messagebox: MagicMock,
+                                                        open_folder_of: MagicMock) -> None:
     config = load_config()
     config['StaffTrend'] = {'start_date': '2024-01-01', 'end_date': '2026-10-01', 'department': '外科',
                             'staff_name': '花﨑'}
@@ -424,6 +436,8 @@ def test_refresh_staff_trend_restores_and_saves_selection(config_path: Path, roo
     analyzer.export_trend.assert_called_once_with('植田 外科', '外科', date(2024, 1, 1), date(2026, 10, 1), 4,
                                                   date.today(), '植田')
     assert load_config()['StaffTrend']['staff_name'] == '植田'
+    open_folder_of.assert_called_once_with(analyzer.export_trend.return_value)
+    messagebox.showerror.assert_not_called()
 
 
 def test_init_restores_saved_trend_settings(config_path: Path, root: tk.Tk) -> None:

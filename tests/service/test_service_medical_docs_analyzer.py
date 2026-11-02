@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 from openpyxl import Workbook, load_workbook
 
-from service import service_excel_writer
 from service.service_database import open_database
 from service.service_excel_reader import Draft, NoDataError
 from service.service_master import Department
@@ -13,13 +12,6 @@ from service.service_medical_docs_analyzer import (TOP_DOCUMENT_COUNT, DraftStat
                                                    draft_status, make_overview, split_list)
 from tests.service.conftest import MakeWorkbook
 from utils.config_manager import load_config, save_config
-
-
-@pytest.fixture
-def startfile(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
-    mock = MagicMock()
-    monkeypatch.setattr(service_excel_writer.os, 'startfile', mock, raising=False)
-    return mock
 
 
 def database_rows(config_path: Path) -> list[tuple[str, str]]:
@@ -186,7 +178,7 @@ def test_backup_database(config_path: Path) -> None:
     assert backup_path == tmp_path / 'backup' / 'database_20250401.db'
 
 
-def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook, startfile: MagicMock) -> None:
+def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     Workbook().save(tmp_path / 'template.xlsx')
     make_workbook(tmp_path / 'source.xlsx', [
@@ -209,10 +201,9 @@ def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook, startfile:
         ['花﨑', 1, 0, 1],
         ['合計', 2, 1, 1],
     ]
-    startfile.assert_called_once()
 
 
-def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkbook, startfile: MagicMock) -> None:
+def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     Workbook().save(tmp_path / 'template.xlsx')
     make_workbook(tmp_path / 'source.xlsx', [
@@ -239,7 +230,7 @@ def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkboo
     ]
 
 
-def test_export_staff(config_path: Path, make_workbook: MakeWorkbook, startfile: MagicMock) -> None:
+def test_export_staff(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     make_workbook(tmp_path / 'source.xlsx', [
         ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
@@ -264,7 +255,7 @@ def test_export_staff_limits_documents_to_top(config_path: Path, monkeypatch: py
     staff_summary.assert_called_once_with('花﨑', date(2025, 4, 1), date(2025, 4, 30), TOP_DOCUMENT_COUNT)
 
 
-def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook, startfile: MagicMock) -> None:
+def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     make_workbook(tmp_path / 'source.xlsx', [
         ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
@@ -283,8 +274,7 @@ def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook
     assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数推移_外科_20250401-20260331.xlsx'
 
 
-def test_staff_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook,
-                                        startfile: MagicMock) -> None:
+def test_staff_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     make_workbook(tmp_path / 'source.xlsx', [
         ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],

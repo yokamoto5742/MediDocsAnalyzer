@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+## [1.13.9] - 2026-11-02
+
+### 変更
+- Excel 出力後に出力先フォルダを開く処理をサービス(`service_excel_writer`)から画面側の `app/folder.py` の `open_folder_of` に移し、Excel 出力と取込エラー行の CSV 保存で共用するようにした。writer は保存してパスを返すだけにした
+
 ## [1.13.8] - 2026-11-02
 
 ### 変更

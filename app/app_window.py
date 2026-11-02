@@ -7,6 +7,7 @@ from tkcalendar import DateEntry
 
 from app import __version__, constants
 from app.date_entry import make_date_entry, read_date_range
+from app.folder import open_folder_of
 from app.import_errors_dialog import ImportErrorsDialog
 from app.login_dialog import ChangePasswordDialog
 from app.master_dialog import MasterDialog
@@ -261,7 +262,7 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.NOT_ANALYZED_ERROR_MESSAGE)
             return
         try:
-            self.analyzer.run_analysis(*self.period)
+            open_folder_of(self.analyzer.run_analysis(*self.period))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
@@ -271,7 +272,7 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.NOT_ANALYZED_ERROR_MESSAGE)
             return
         try:
-            self.analyzer.export_staff(staff_name, *self.period)
+            open_folder_of(self.analyzer.export_staff(staff_name, *self.period))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
@@ -356,9 +357,9 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.INVALID_TREND_RANGE_MESSAGE)
             return
         try:
-            self.analyzer.export_trend(request.subject, request.department_filter, request.start_date,
-                                       request.end_date, self.year_start_month_var.get(), date.today(),
-                                       request.staff_name)
+            open_folder_of(self.analyzer.export_trend(
+                request.subject, request.department_filter, request.start_date, request.end_date,
+                self.year_start_month_var.get(), date.today(), request.staff_name))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 

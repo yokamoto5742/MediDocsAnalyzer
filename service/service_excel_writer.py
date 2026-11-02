@@ -1,4 +1,3 @@
-import os
 from datetime import date
 from pathlib import Path
 from typing import cast
@@ -37,20 +36,16 @@ def save_results(summary: OverallSummary, template_path: str, output_dir: str) -
     write_counts(sheet, summary)
     set_print_layout(sheet)
 
-    return save_and_open(wb, output_dir,
+    return save_workbook(wb, output_dir,
                          f'医療文書作成件数{counts.first_date:%Y%m%d}-{counts.last_date:%Y%m%d}.xlsx')
 
 
-def save_and_open(wb: Workbook, output_dir: str, file_name: str) -> str:
-    """保存して出力先フォルダを開き、保存先のパスを返す"""
+def save_workbook(wb: Workbook, output_dir: str, file_name: str) -> str:
+    """出力先フォルダに保存し、保存先のパスを返す"""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     output_file_path = output_path / file_name
     wb.save(output_file_path)
-
-    # フォルダを開く(エクスプローラーは同じフォルダの窓が開いていれば、新しく開かずにそれを前に出す)
-    os.startfile(output_path)
-
     return str(output_file_path)
 
 
@@ -112,7 +107,7 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
     sheet.add_chart(chart, f'A{table_rows + 7}')
     set_print_layout(sheet)
 
-    return save_and_open(wb, output_dir,
+    return save_workbook(wb, output_dir,
                          f'医療文書作成件数_{name}_{start_date:%Y%m%d}-{end_date:%Y%m%d}.xlsx')
 
 
@@ -158,5 +153,5 @@ def save_trend_results(trend: TrendCounts, subject: str, start_date: date, end_d
     set_print_layout(sheet)
 
     file_subject = subject.replace(' ', '_')
-    return save_and_open(wb, output_dir,
+    return save_workbook(wb, output_dir,
                          f'医療文書作成件数推移_{file_subject}_{start_date:%Y%m%d}-{end_date:%Y%m%d}.xlsx')

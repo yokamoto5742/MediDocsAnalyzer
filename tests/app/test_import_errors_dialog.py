@@ -32,7 +32,7 @@ def test_copy_puts_tab_separated_text(dialog: ImportErrorsDialog) -> None:
 def test_save_csv_writes_to_output_dir_and_opens_it(dialog: ImportErrorsDialog, config_path: Path) -> None:
     output_dir = config_path.parent / 'output'
     with patch('app.import_errors_dialog.datetime') as mock_datetime, \
-            patch('app.import_errors_dialog.os.startfile', create=True) as startfile:
+            patch('app.import_errors_dialog.open_folder_of') as open_folder_of:
         mock_datetime.now.return_value = datetime(2026, 10, 31, 14, 30, 5)
         dialog.save_csv()
 
@@ -40,7 +40,7 @@ def test_save_csv_writes_to_output_dir_and_opens_it(dialog: ImportErrorsDialog, 
     assert path.read_bytes().startswith(b'\xef\xbb\xbf')
     with open(path, encoding='utf-8-sig', newline='') as f:
         assert list(csv.reader(f)) == [list(constants.ERROR_COLUMNS), ['元データ.xlsm', '5', '123', '預り日が空です', ' | 花﨑']]
-    startfile.assert_called_once_with(output_dir)
+    open_folder_of.assert_called_once_with(path)
 
 
 def test_save_csv_shows_error(dialog: ImportErrorsDialog, config_path: Path) -> None:
