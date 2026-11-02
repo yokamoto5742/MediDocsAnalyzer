@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [1.13.13] - 2026-11-02
+
+### 変更
+- 古いログファイルの削除を `cleanup_old_logs`(`log_retention_days` 日を過ぎたものを消す)だけにし、`TimedRotatingFileHandler` の世代数による削除をやめた
+- `file_cleaner.py` の docstring をほかのファイルと同じ短い書き方にし、ログの `str(e)` を `e` にした
+
 ## [1.13.12] - 2026-11-02
 
 ### 変更

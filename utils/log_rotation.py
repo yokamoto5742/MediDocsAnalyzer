@@ -18,8 +18,8 @@ def setup_logging(config: configparser.ConfigParser) -> None:
     os.makedirs(log_directory, exist_ok=True)
 
     log_file = os.path.join(log_directory, LOG_FILE_NAME)
-    file_handler = TimedRotatingFileHandler(filename=log_file, when='midnight', backupCount=log_retention_days,
-                                            encoding='utf-8')
+    # 古いログは日数で cleanup_old_logs が消すため、ハンドラには世代数を持たせない
+    file_handler = TimedRotatingFileHandler(filename=log_file, when='midnight', encoding='utf-8')
     file_handler.suffix = "%Y-%m-%d.log"
 
     logging.basicConfig(
@@ -43,4 +43,4 @@ def cleanup_old_logs(log_directory: str, retention_days: int) -> None:
                     os.remove(file_path)
                     logging.info(f"古いログファイルを削除しました: {filename}")
                 except OSError as e:
-                    logging.error(f"ログファイルの削除中にエラーが発生しました {filename}: {str(e)}")
+                    logging.error(f"ログファイルの削除中にエラーが発生しました {filename}: {e}")

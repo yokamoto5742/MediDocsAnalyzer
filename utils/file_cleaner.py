@@ -6,12 +6,7 @@ from pathlib import Path
 
 
 def cleanup_old_files(config: configparser.ConfigParser) -> None:
-    """
-    設定ファイルの内容に基づき古いファイルを削除する
-
-    Args:
-        config: 設定ファイルオブジェクト
-    """
+    """[FileCleanup] の設定に従い、出力先フォルダの古いファイルを消す"""
     if not config.getboolean('FileCleanup', 'enabled', fallback=True):
         logging.info("ファイルクリーンアップが無効になっています")
         return
@@ -27,13 +22,7 @@ def cleanup_old_files(config: configparser.ConfigParser) -> None:
 
 
 def _delete_old_files(directory: str, retention_days: int) -> None:
-    """
-    指定ディレクトリ内の古いファイルを削除する
-
-    Args:
-        directory: 削除対象のディレクトリ
-        retention_days: ファイル保持日数
-    """
+    """directory の中で、更新から retention_days 日以上たったファイルを消す"""
     now = datetime.now()
     deleted_count = 0
 
@@ -51,9 +40,9 @@ def _delete_old_files(directory: str, retention_days: int) -> None:
                     deleted_count += 1
                     logging.info(f"古いファイルを削除しました: {file_path.name} (経過日数: {age_days}日)")
                 except OSError as e:
-                    logging.error(f"ファイルの削除中にエラーが発生しました {file_path.name}: {str(e)}")
+                    logging.error(f"ファイルの削除中にエラーが発生しました {file_path.name}: {e}")
 
         if deleted_count > 0:
             logging.info(f"合計 {deleted_count} 個のファイルを削除しました")
     except Exception as e:
-        logging.error(f"ファイルクリーンアップ中にエラーが発生しました: {str(e)}")
+        logging.error(f"ファイルクリーンアップ中にエラーが発生しました: {e}")
