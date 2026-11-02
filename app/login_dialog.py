@@ -44,7 +44,12 @@ class LoginDialog:
         self.dialog.bind('<Return>', lambda _event: self.login())
 
     def login(self) -> None:
-        result = self.analyzer.authenticate(self.emr_id_var.get().strip(), self.password_var.get())
+        try:
+            result = self.analyzer.authenticate(self.emr_id_var.get().strip(), self.password_var.get())
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.LOGIN_ERROR_MESSAGE.format(error=e),
+                                 parent=self.dialog)
+            return
         if result is None:
             messagebox.showerror(constants.ERROR_TITLE, constants.LOGIN_FAILED_MESSAGE, parent=self.dialog)
             self.password_var.set('')
@@ -81,10 +86,14 @@ class ChangePasswordDialog:
             message = constants.PASSWORD_MISMATCH_MESSAGE
         else:
             assert self.user.id is not None
-            self.analyzer.change_password(self.user.id, password)
-            self.changed = True
-            self.dialog.destroy()
-            return
+            try:
+                self.analyzer.change_password(self.user.id, password)
+            except Exception as e:
+                message = constants.PASSWORD_CHANGE_ERROR_MESSAGE.format(error=e)
+            else:
+                self.changed = True
+                self.dialog.destroy()
+                return
         messagebox.showerror(constants.ERROR_TITLE, message, parent=self.dialog)
 
 

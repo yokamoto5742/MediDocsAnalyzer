@@ -105,3 +105,27 @@ def test_save_and_delete_department(dialog: MasterDialog, analyzer: MedicalDocsA
     dialog.delete_department()
 
     assert analyzer.list_departments() == [Department('外科', 2), Department('眼科', 3)]
+
+
+def test_issue_temporary_password_shows_database_error(dialog: MasterDialog, messagebox: MagicMock) -> None:
+    dialog.staff_list[0].emr_id = 'A01'
+    dialog.staff_tree.selection_set('0')
+    messagebox.askyesno.return_value = True
+
+    with patch.object(dialog.analyzer, 'issue_temporary_password', side_effect=OSError('locked')):
+        dialog.issue_temporary_password()
+
+    assert messagebox.showerror.call_args.args == (
+        constants.ERROR_TITLE, constants.ISSUE_PASSWORD_ERROR_MESSAGE.format(error='locked'))
+    messagebox.showinfo.assert_not_called()
+
+
+def test_delete_department_shows_database_error(dialog: MasterDialog, messagebox: MagicMock) -> None:
+    dialog.department_tree.selection_set('0')
+    messagebox.askyesno.return_value = True
+
+    with patch.object(dialog.analyzer, 'delete_department', side_effect=OSError('locked')):
+        dialog.delete_department()
+
+    assert messagebox.showerror.call_args.args == (
+        constants.ERROR_TITLE, constants.DELETE_DEPARTMENT_ERROR_MESSAGE.format(error='locked'))

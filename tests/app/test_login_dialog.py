@@ -44,6 +44,18 @@ def test_login_fails(root: tk.Tk, messagebox: MagicMock) -> None:
     assert messagebox.showerror.call_args.args == (constants.ERROR_TITLE, constants.LOGIN_FAILED_MESSAGE)
 
 
+def test_login_shows_database_error(root: tk.Tk, messagebox: MagicMock) -> None:
+    analyzer = MagicMock()
+    analyzer.authenticate.side_effect = OSError('offline')
+    dialog = LoginDialog(root, analyzer)
+
+    dialog.login()
+
+    assert dialog.user is None
+    assert messagebox.showerror.call_args.args == (
+        constants.ERROR_TITLE, constants.LOGIN_ERROR_MESSAGE.format(error='offline'))
+
+
 @pytest.mark.parametrize(('password', 'confirm', 'expected_message'), [
     ('abc', 'abc', constants.PASSWORD_TOO_SHORT_MESSAGE.format(length=6)),
     ('secret1', 'secret2', constants.PASSWORD_MISMATCH_MESSAGE),
@@ -72,6 +84,20 @@ def test_change_password_saves(root: tk.Tk, messagebox: MagicMock) -> None:
 
     analyzer.change_password.assert_called_once_with(1, 'secret1')
     assert dialog.changed
+
+
+def test_change_password_shows_database_error(root: tk.Tk, messagebox: MagicMock) -> None:
+    analyzer = MagicMock()
+    analyzer.change_password.side_effect = OSError('locked')
+    dialog = ChangePasswordDialog(root, analyzer, USER)
+    dialog.password_var.set('secret1')
+    dialog.confirm_var.set('secret1')
+
+    dialog.save()
+
+    assert messagebox.showerror.call_args.args == (
+        constants.ERROR_TITLE, constants.PASSWORD_CHANGE_ERROR_MESSAGE.format(error='locked'))
+    assert not dialog.changed
 
 
 def test_ask_login_requires_password_change(root: tk.Tk, messagebox: MagicMock) -> None:

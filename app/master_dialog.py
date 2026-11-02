@@ -184,7 +184,12 @@ class MasterDialog:
                                    constants.ISSUE_PASSWORD_CONFIRM_MESSAGE.format(name=staff.name),
                                    parent=self.dialog):
             return
-        password = self.analyzer.issue_temporary_password(staff.id)
+        try:
+            password = self.analyzer.issue_temporary_password(staff.id)
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.ISSUE_PASSWORD_ERROR_MESSAGE.format(error=e),
+                                 parent=self.dialog)
+            return
         messagebox.showinfo(constants.ISSUE_PASSWORD_BUTTON_LABEL,
                             constants.TEMPORARY_PASSWORD_MESSAGE.format(name=staff.name, password=password),
                             parent=self.dialog)
@@ -210,8 +215,14 @@ class MasterDialog:
         department = self.selected_department()
         if department is None:
             return
-        if messagebox.askyesno(constants.CONFIRM_TITLE,
-                               constants.DELETE_DEPARTMENT_CONFIRM_MESSAGE.format(name=department.name),
-                               parent=self.dialog):
+        if not messagebox.askyesno(constants.CONFIRM_TITLE,
+                                   constants.DELETE_DEPARTMENT_CONFIRM_MESSAGE.format(name=department.name),
+                                   parent=self.dialog):
+            return
+        try:
             self.analyzer.delete_department(department.name)
-            self.refresh()
+        except Exception as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.DELETE_DEPARTMENT_ERROR_MESSAGE.format(error=e),
+                                 parent=self.dialog)
+            return
+        self.refresh()

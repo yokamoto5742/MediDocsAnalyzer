@@ -377,12 +377,8 @@ class MedicalDocsAnalyzerGUI:
 
     def change_password(self) -> None:
         assert self.user is not None
-        try:
-            dialog = ChangePasswordDialog(self.root, self.analyzer, self.user)
-            self.root.wait_window(dialog.dialog)
-        except Exception as e:
-            messagebox.showerror(constants.ERROR_TITLE, constants.ANALYSIS_ERROR_MESSAGE.format(error=e))
-            return
+        dialog = ChangePasswordDialog(self.root, self.analyzer, self.user)
+        self.root.wait_window(dialog.dialog)
         if dialog.changed:
             messagebox.showinfo(constants.COMPLETE_TITLE, constants.PASSWORD_CHANGED_MESSAGE)
 

@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from main import main
+from app import constants
+from main import main, report_callback_error
 
 
 @pytest.fixture
@@ -53,3 +54,20 @@ def test_main_quits_when_login_cancelled(mock_tk: MagicMock, mock_gui: MagicMock
     mock_gui.assert_not_called()
     mock_tk.return_value.destroy.assert_called_once()
     mock_tk.return_value.mainloop.assert_not_called()
+
+
+def test_main_reports_callback_errors(mock_tk: MagicMock, mock_gui: MagicMock) -> None:
+    with patch('main.login_if_required', return_value=(True, None)):
+        main()
+
+    assert mock_tk.return_value.report_callback_exception is report_callback_error
+
+
+def test_report_callback_error_shows_message() -> None:
+    error = OSError('locked')
+    with patch('main.messagebox') as messagebox, patch('main.logging') as logging:
+        report_callback_error(OSError, error, None)
+
+    messagebox.showerror.assert_called_once_with(
+        constants.ERROR_TITLE, constants.UNEXPECTED_ERROR_MESSAGE.format(error='locked'))
+    logging.error.assert_called_once()
