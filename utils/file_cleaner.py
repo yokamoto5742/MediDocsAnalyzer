@@ -17,46 +17,13 @@ def cleanup_old_files(config: configparser.ConfigParser) -> None:
         return
 
     retention_days = config.getint('FileCleanup', 'retention_days', fallback=1)
-    output_path = config.get('Paths', 'output_path', fallback='')
+    output_path = config.get('PATHS', 'output_dir', fallback='')
 
     if not output_path or not os.path.exists(output_path):
         logging.warning(f"出力パスが存在しません: {output_path}")
         return
 
     _delete_old_files(output_path, retention_days)
-
-
-def delete_unexpected_input_files(input_directory: str, keep_file_paths: list[str]) -> list[str]:
-    """
-    入力ディレクトリから保持対象以外のファイルを削除する
-
-    Args:
-        input_directory: 入力ディレクトリ
-        keep_file_paths: 残すファイルのパス
-
-    Returns:
-        削除したファイル名のリスト
-    """
-    if not input_directory or not os.path.isdir(input_directory):
-        logging.warning(f"入力パスが存在しません: {input_directory}")
-        return []
-
-    # Windowsはファイル名の大文字小文字を区別しないため、小文字に揃えて比較する
-    keep_file_names = {Path(keep_file_path).name.lower() for keep_file_path in keep_file_paths}
-    deleted_file_names = []
-
-    for file_path in Path(input_directory).iterdir():
-        if not file_path.is_file() or file_path.name.lower() in keep_file_names:
-            continue
-
-        try:
-            file_path.unlink()
-            deleted_file_names.append(file_path.name)
-            logging.info(f"入力フォルダの不要なファイルを削除しました: {file_path.name}")
-        except OSError as e:
-            logging.error(f"ファイルの削除中にエラーが発生しました {file_path.name}: {str(e)}")
-
-    return deleted_file_names
 
 
 def _delete_old_files(directory: str, retention_days: int) -> None:

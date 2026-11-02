@@ -76,6 +76,9 @@ uv run python main.py
    - 起動時に元データを読めないときは、エラーを概要タブの見出しに表示します
 4. バックアップ
    - 起動時にその日のバックアップがなければ `backup_dir` に `{データベース名}_{yyyymmdd}.db` を作り、`keep_generations` を超えた古いものを削除します
+5. 出力フォルダの掃除・ログ
+   - 起動時に `output_dir` 内で更新から `retention_days` 日を過ぎたファイルを削除します(サブフォルダは残します)
+   - ログは `config.ini` と同じフォルダの `log_directory` に出し、`log_retention_days` 日を過ぎたものを削除します
 
 ## 設定ファイル
 設定は `utils/config.ini` の1つだけです。ビルドした exe では、exe と同じフォルダの `config.ini` を使います(無ければ同梱のものをコピーします)。`[Appearance]`・`[PATHS]`・`[Backup]`・`[Overview]` は「設定」画面で変更します。`[Analysis]` はメイン画面とマスタで決まるため、設定画面には出しません。
@@ -91,6 +94,10 @@ uv run python main.py
 | | `output_dir` | 集計結果の出力先フォルダ |
 | `[Backup]` | `keep_generations` | 残すバックアップの数(既定は30) |
 | `[Overview]` | `pending_days` | 概要で確認する日数(本日を含む。既定は7) |
+| `[FileCleanup]` | `enabled` | 起動時に出力フォルダの古いファイルを削除するか(既定は true) |
+| | `retention_days` | 出力ファイルを残す日数(既定は1) |
+| `[LOGGING]` | `log_directory` | ログの出力先フォルダ(`config.ini` と同じフォルダからの相対パス) |
+| | `log_retention_days` | ログを残す日数(既定は7) |
 | `[Analysis]` | `start_date` / `end_date` | 前回の分析期間(アプリが自動で更新) |
 | | `year_start_month` | 年の始まりの月(1 または 4)(アプリが自動で更新) |
 | | `ordered_names` | マスタが空のときに登録する担当者(カンマ区切り) |

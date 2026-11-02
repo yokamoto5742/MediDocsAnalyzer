@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-02
+
+### 追加
+- 起動時に `[PATHS] output_dir` の古いファイル(更新から `[FileCleanup] retention_days` 日を過ぎたもの)を削除するようにした。出力した Excel・CSV がたまり続けるのを防ぐため。`enabled = false` で止められる。削除に失敗したファイルはログに残して続ける
+- ログを `config.ini` と同じフォルダ(exe では exe のフォルダ)の `[LOGGING] log_directory` に日ごとに出し、`log_retention_days` 日を過ぎたものを削除するようにした
+
 ## [1.11.3] - 2026-11-01
 
 ### 削除

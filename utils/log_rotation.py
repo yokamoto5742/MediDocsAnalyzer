@@ -1,22 +1,25 @@
+import configparser
 import logging
 import os
 from datetime import datetime, timedelta
 from logging.handlers import TimedRotatingFileHandler
 
-import configparser
+from utils import config_manager
+
+LOG_FILE_NAME = 'MediDocsAnalyzer.log'
 
 
-def setup_logging(config: configparser.ConfigParser):
-    log_directory = os.path.join(os.path.dirname(__file__), config.get('LOGGING', 'log_directory', fallback='logs'))
+def setup_logging(config: configparser.ConfigParser) -> None:
+    # 凍結時も残るよう、config.ini と同じフォルダ(exe のフォルダ)を基準にする
+    log_directory = os.path.join(os.path.dirname(config_manager.CONFIG_PATH),
+                                 config.get('LOGGING', 'log_directory', fallback='logs'))
     log_retention_days = config.getint('LOGGING', 'log_retention_days', fallback=7)
 
-    if not os.path.exists(log_directory):
-        os.makedirs(log_directory)
+    os.makedirs(log_directory, exist_ok=True)
 
-    parent_dir_name = os.path.basename(os.path.dirname(os.path.dirname(log_directory)))
-    log_file = os.path.join(log_directory, f'{parent_dir_name}.log')
-
-    file_handler = TimedRotatingFileHandler(filename=log_file, when='midnight', backupCount=log_retention_days)
+    log_file = os.path.join(log_directory, LOG_FILE_NAME)
+    file_handler = TimedRotatingFileHandler(filename=log_file, when='midnight', backupCount=log_retention_days,
+                                            encoding='utf-8')
     file_handler.suffix = "%Y-%m-%d.log"
 
     logging.basicConfig(
@@ -28,13 +31,11 @@ def setup_logging(config: configparser.ConfigParser):
     cleanup_old_logs(log_directory, log_retention_days)
 
 
-def cleanup_old_logs(log_directory: str, retention_days: int):
+def cleanup_old_logs(log_directory: str, retention_days: int) -> None:
     now = datetime.now()
-    parent_dir_name = os.path.basename(os.path.dirname(os.path.dirname(log_directory)))
-    main_log_file = f'{parent_dir_name}.log'
 
     for filename in os.listdir(log_directory):
-        if filename.endswith('.log') and filename != main_log_file:
+        if filename.endswith('.log') and filename != LOG_FILE_NAME:
             file_path = os.path.join(log_directory, filename)
             file_modification_time = datetime.fromtimestamp(os.path.getmtime(file_path))
             if now - file_modification_time > timedelta(days=retention_days):
