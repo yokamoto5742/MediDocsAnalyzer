@@ -324,21 +324,30 @@ def test_export_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, me
 
 
 def test_staff_user_sees_only_own_summary(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
-    with patch('app.app_window.MedicalDocsAnalyzer'):
+    with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         gui = MedicalDocsAnalyzerGUI(root, Staff(2, '花﨑', 2, emr_id='S01'))
+        analyzer = analyzer_class.return_value
+        analyzer.prepare_source_import.return_value = make_plan([])
+        analyzer.overall_summary.return_value = make_summary()
+        analyzer.staff_summary.return_value = make_staff_counts('花﨑')
 
+        gui.start_analysis()
+
+    assert gui.restricted_staff == '花﨑'
     assert gui.root.title().endswith('花﨑')
     assert all(button.instate(['disabled']) for button in gui.admin_buttons)
     assert gui.result_view.notebook.tab(gui.result_view.overall_tab, 'state') == 'hidden'
     assert gui.result_view.notebook.tab(gui.result_view.overview_tab, 'state') == 'normal'
-    gui.result_view.set_staff_names(['植田', '花﨑'])
+    # 集計結果に他の担当者がいても、本人だけを選べる
     assert gui.result_view.staff_combobox.cget('values') == ('花﨑',)
+    analyzer.staff_summary.assert_called_once_with('花﨑', date(2025, 4, 1), date(2025, 6, 30))
 
 
 def test_admin_user_can_use_everything(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
     with patch('app.app_window.MedicalDocsAnalyzer'):
         gui = MedicalDocsAnalyzerGUI(root, Staff(1, '植田', 1, emr_id='A01', role=ADMIN_ROLE))
 
+    assert gui.restricted_staff is None
     assert not any(button.instate(['disabled']) for button in gui.admin_buttons)
     assert gui.result_view.notebook.tab(gui.result_view.overall_tab, 'state') == 'normal'
 

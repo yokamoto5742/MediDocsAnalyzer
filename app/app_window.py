@@ -74,19 +74,33 @@ class MedicalDocsAnalyzerGUI:
         self._setup_date_frame(main_frame)
         self._setup_buttons(main_frame)
 
-        self.result_view = ResultView(self.root, self.export_overall, self.export_staff, self.show_staff_summary,
-                                      self.export_trend, self.refresh_trend,
-                                      self.export_staff_trend, self.refresh_staff_trend)
+        self.result_view = ResultView(
+            self.root,
+            on_export_overall=self.export_overall,
+            on_export_staff=self.export_staff,
+            on_staff_selected=self.show_staff_summary,
+            on_export_trend=self.export_trend,
+            on_trend_changed=self.refresh_trend,
+            on_export_staff_trend=self.export_staff_trend,
+            on_staff_trend_changed=self.refresh_staff_trend,
+        )
         self.result_view.notebook.grid(row=0, column=1, sticky=tk.NSEW, padx=(0, 10), pady=10)
         self._apply_permissions()
 
+    @property
+    def restricted_staff(self) -> str | None:
+        """職員としてログインしたときの本人の氏名。None なら全員分を見られる"""
+        if self.user is None or self.user.role == ADMIN_ROLE:
+            return None
+        return self.user.name
+
     def _apply_permissions(self) -> None:
         """職員は Excel読込・マスタ・設定を使えず、自分の個人集計だけを見られる"""
-        if self.user is None or self.user.role == ADMIN_ROLE:
+        if self.restricted_staff is None:
             return
         for button in self.admin_buttons:
             button.state(['disabled'])
-        self.result_view.restrict_to_staff(self.user.name)
+        self.result_view.restrict_to_staff(self.restricted_staff)
 
     def _setup_date_frame(self, parent: ttk.Frame) -> None:
         date_frame = ttk.LabelFrame(parent, text=constants.ANALYSIS_PERIOD_LABEL, padding="5")
@@ -240,7 +254,8 @@ class MedicalDocsAnalyzerGUI:
 
         self.period = (start_date, end_date)
         self.result_view.show_overall(summary)
-        self.result_view.set_staff_names(summary.staff_members)
+        self.result_view.set_staff_names(
+            summary.staff_members if self.restricted_staff is None else [self.restricted_staff])
         self.show_staff_summary()
 
     def analyze_saved_period(self) -> None:
@@ -279,7 +294,7 @@ class MedicalDocsAnalyzerGUI:
     def load_trend(self) -> None:
         """全体推移と個人推移を、前回選んだ範囲・診療科・氏名で表示する。職員は全体推移を見られない"""
         view = self.result_view
-        if view.restricted_staff is None:
+        if self.restricted_staff is None:
             self._load_trend_panel(view.trend, TREND_SECTION)
         self._load_trend_panel(view.staff_trend, STAFF_TREND_SECTION)
 
@@ -305,8 +320,8 @@ class MedicalDocsAnalyzerGUI:
 
     def _trend_staff_names(self) -> list[str]:
         """個人推移の氏名の選択肢。退職者の過去の推移も見られるよう、マスタの全担当者を並べる。職員は本人だけ"""
-        if self.result_view.restricted_staff is not None:
-            return [self.result_view.restricted_staff]
+        if self.restricted_staff is not None:
+            return [self.restricted_staff]
         return [staff.name for staff in self.analyzer.list_staff()]
 
     @staticmethod

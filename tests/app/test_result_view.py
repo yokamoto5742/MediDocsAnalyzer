@@ -21,7 +21,9 @@ TREND = TrendCounts(4, [(2025, [1] * 12), (2026, [2, 3, *[None] * 10])])
 
 
 def make_view(root: tk.Tk) -> ResultView:
-    return ResultView(root, *(MagicMock() for _ in range(7)))
+    callbacks = ('on_export_overall', 'on_export_staff', 'on_staff_selected', 'on_export_trend', 'on_trend_changed',
+                 'on_export_staff_trend', 'on_staff_trend_changed')
+    return ResultView(root, **{name: MagicMock() for name in callbacks})
 
 
 def tree_values(tree: ttk.Treeview) -> list[tuple[str, ...]]:

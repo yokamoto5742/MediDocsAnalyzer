@@ -155,28 +155,22 @@ class TrendPanel:
 class ResultView:
     """「概要」タブで下書きの一覧を、「全体」「個人」「全体推移」「個人推移」タブで集計結果を表と図にして見せる"""
 
-    def __init__(self, parent: tk.Misc, on_export_overall: Callable[[], None],
+    def __init__(self, parent: tk.Misc, *, on_export_overall: Callable[[], None],
                  on_export_staff: Callable[[], None], on_staff_selected: Callable[[], None],
                  on_export_trend: Callable[[], None], on_trend_changed: Callable[[], None],
                  on_export_staff_trend: Callable[[], None], on_staff_trend_changed: Callable[[], None]) -> None:
-        # 職員としてログインしたときの本人の氏名。None なら全員分を見られる
-        self.restricted_staff: str | None = None
         # 全体の表の担当者の行と合計行。並べ替えても合計行は最後に置く
         self.overall_staff_rows: list[list[str | int]] = []
         self.overall_total_row: list[str | int] = []
         # 並べ替えている列の番号と降順かどうか。None なら表示順のまま
         self.overall_sort: tuple[int, bool] | None = None
         self.notebook = ttk.Notebook(parent)
-        self.overview_tab = ttk.Frame(self.notebook, padding="5")
-        self.overall_tab = ttk.Frame(self.notebook, padding="5")
-        self.staff_tab = ttk.Frame(self.notebook, padding="5")
-        self.notebook.add(self.overview_tab, text=constants.OVERVIEW_TAB_LABEL)
-        self.notebook.add(self.overall_tab, text=constants.OVERALL_TAB_LABEL)
-        self.trend_tab = ttk.Frame(self.notebook, padding="5")
-        self.staff_trend_tab = ttk.Frame(self.notebook, padding="5")
-        self.notebook.add(self.trend_tab, text=constants.TREND_TAB_LABEL)
-        self.notebook.add(self.staff_tab, text=constants.STAFF_SUMMARY_TAB_LABEL)
-        self.notebook.add(self.staff_trend_tab, text=constants.STAFF_TREND_TAB_LABEL)
+        # 表示する順に作る
+        self.overview_tab = self._add_tab(constants.OVERVIEW_TAB_LABEL)
+        self.overall_tab = self._add_tab(constants.OVERALL_TAB_LABEL)
+        self.trend_tab = self._add_tab(constants.TREND_TAB_LABEL)
+        self.staff_tab = self._add_tab(constants.STAFF_SUMMARY_TAB_LABEL)
+        self.staff_trend_tab = self._add_tab(constants.STAFF_TREND_TAB_LABEL)
         self._setup_overview_tab()
         self._setup_overall_tab(on_export_overall)
         self._setup_staff_tab(on_export_staff, on_staff_selected)
@@ -184,6 +178,11 @@ class ResultView:
                                 with_staff=False)
         self.staff_trend = TrendPanel(self.staff_trend_tab, constants.STAFF_TREND_TAB_LABEL, on_export_staff_trend,
                                       on_staff_trend_changed, with_staff=True)
+
+    def _add_tab(self, label: str) -> ttk.Frame:
+        tab = ttk.Frame(self.notebook, padding="5")
+        self.notebook.add(tab, text=label)
+        return tab
 
     def _setup_overview_tab(self) -> None:
         tab = self.overview_tab
@@ -278,8 +277,7 @@ class ResultView:
             self.overall_tree.insert('', tk.END, values=row)
 
     def restrict_to_staff(self, staff_name: str) -> None:
-        """全体・全体推移タブを隠し、個人・個人推移タブを staff_name だけにする。概要タブは割り振りに使うため職員にも見せる"""
-        self.restricted_staff = staff_name
+        """全体・全体推移タブを隠し、個人・個人推移タブの氏名を選べなくする。概要タブは割り振りに使うため職員にも見せる"""
         self.notebook.hide(self.overall_tab)
         self.notebook.hide(self.trend_tab)
         self.staff_combobox.state(['disabled'])
@@ -288,8 +286,6 @@ class ResultView:
         self.staff_trend.staff_combobox.state(['disabled'])
 
     def set_staff_names(self, names: list[str]) -> None:
-        if self.restricted_staff is not None:
-            names = [self.restricted_staff]
         self.staff_combobox.configure(values=names)
         if self.staff_var.get() not in names:
             self.staff_var.set(names[0] if names else '')
