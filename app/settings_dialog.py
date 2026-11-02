@@ -4,7 +4,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from app import constants
 from service.service_medical_docs_analyzer import DEFAULT_PENDING_DAYS
-from utils.config_manager import load_config, save_config
+from utils.config_manager import load_config, update_config
 
 EXCEL_FILE_TYPES = [(constants.EXCEL_FILE_TYPE_LABEL, '*.xlsx *.xlsm')]
 DATABASE_FILE_TYPES = [(constants.DATABASE_FILE_TYPE_LABEL, '*.db')]
@@ -105,13 +105,9 @@ class SettingsDialog:
                 label=label, minimum=minimum, maximum=maximum), parent=self.dialog)
             return
 
-        # メイン画面が保存した期間を消さないよう、保存直前に読み直す
-        config = load_config()
-        config['PATHS'].update({key: var.get().strip() for key, var in self.path_vars.items()})
+        sections: dict[str, dict[str, str]] = {'PATHS': {key: var.get().strip() for key, var in self.path_vars.items()}}
         for section, key, _, _, _ in NUMBER_SETTINGS:
-            if not config.has_section(section):
-                config.add_section(section)
-            config[section][key] = str(int(self.number_vars[key].get().strip()))
-        save_config(config)
+            sections.setdefault(section, {})[key] = str(int(self.number_vars[key].get().strip()))
+        update_config(sections)
         self.saved = True
         self.dialog.destroy()

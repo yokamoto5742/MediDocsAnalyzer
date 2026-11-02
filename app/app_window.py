@@ -14,7 +14,7 @@ from service.service_data_analyzer import trend_subject
 from service.service_excel_reader import Draft, NoDataError
 from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
-from utils.config_manager import load_config, save_config
+from utils.config_manager import load_config, update_config
 from utils.date_period import PERIOD_NAMES, fiscal_year, get_period_range, parse_date
 
 DEFAULT_YEAR_START_MONTH = 4
@@ -357,26 +357,18 @@ class MedicalDocsAnalyzerGUI:
 
     def _save_trend_settings(self, section: str, department: str, staff_name: str | None, start_date: date,
                              end_date: date) -> None:
-        # 設定画面での変更を消さないよう、保存直前に読み直す。旧版の開始年・終了年は消す
-        self.config = load_config()
-        self.config[section] = {
-            'start_date': start_date.isoformat(),
-            'end_date': end_date.isoformat(),
-            'department': department,
-        }
+        values = {'start_date': start_date.isoformat(), 'end_date': end_date.isoformat(), 'department': department}
         if staff_name is not None:
-            self.config[section]['staff_name'] = staff_name
-        save_config(self.config)
+            values['staff_name'] = staff_name
+        # 旧版の開始年・終了年は消す
+        update_config({section: values}, replace=True)
 
     def _save_analysis_settings(self, start_date: date, end_date: date) -> None:
-        # 設定画面での変更を消さないよう、保存直前に読み直す
-        self.config = load_config()
-        self.config['Analysis'].update({
+        update_config({'Analysis': {
             'start_date': start_date.isoformat(),
             'end_date': end_date.isoformat(),
             'year_start_month': str(self.year_start_month_var.get())
-        })
-        save_config(self.config)
+        }})
 
     def change_password(self) -> None:
         assert self.user is not None

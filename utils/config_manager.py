@@ -28,3 +28,14 @@ def load_config() -> configparser.ConfigParser:
 def save_config(config: configparser.ConfigParser) -> None:
     with open(CONFIG_PATH, 'w', encoding='utf-8') as configfile:
         config.write(configfile)
+
+
+def update_config(sections: dict[str, dict[str, str]], replace: bool = False) -> None:
+    """ほかの画面の変更を消さないよう、保存直前に読み直してから sections の値を書き換える。
+    replace なら、そのセクションにある古い値を消してから書く"""
+    config = load_config()
+    for section, values in sections.items():
+        if replace or not config.has_section(section):
+            config[section] = {}
+        config[section].update(values)
+    save_config(config)

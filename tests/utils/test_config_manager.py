@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from utils.config_manager import get_config_path, load_config, save_config
+from utils.config_manager import get_config_path, load_config, save_config, update_config
 
 
 @pytest.fixture
@@ -49,3 +49,20 @@ def test_save_config_round_trip(config_path: Path) -> None:
 
     assert load_config()['Analysis']['start_date'] == '2025-10-01'
     assert '花﨑' in config_path.read_text(encoding='utf-8')
+
+
+def test_update_config_keeps_other_values(config_path: Path) -> None:
+    update_config({'Analysis': {'start_date': '2025-10-01'}, 'Trend': {'department': '内科'}})
+
+    config = load_config()
+    assert config['Analysis']['start_date'] == '2025-10-01'
+    assert config['Analysis']['end_date'] == '2025-06-30'
+    assert dict(config['Trend']) == {'department': '内科'}
+
+
+def test_update_config_replaces_section(config_path: Path) -> None:
+    update_config({'Trend': {'start_year': '2022', 'department': '外科'}})
+
+    update_config({'Trend': {'department': '内科'}}, replace=True)
+
+    assert dict(load_config()['Trend']) == {'department': '内科'}
