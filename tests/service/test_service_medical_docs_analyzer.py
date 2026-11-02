@@ -115,7 +115,7 @@ def test_source_import_replaces_range_of_legacy_documents(config_path: Path, mak
 
     assert plan.start_date == date(2025, 4, 1)
     assert plan.deleted_count == 1
-    assert [(error.row_number, error.patient_id) for error in plan.errors] == [(4, '5')]
+    assert [(error.row_number, error.patient_id) for error in plan.source.errors] == [(4, '5')]
     assert count == 2
     assert database_rows(config_path) == [('2025-03-31', '沖野'), ('2025-04-03', '花﨑')]
     with open_database(str(tmp_path / 'database.db')) as connection:
@@ -165,7 +165,7 @@ def test_prepare_import_rejects_staff_not_in_master(config_path: Path, make_work
 
     plan = MedicalDocsAnalyzer().prepare_source_import()
 
-    assert [error.reason for error in plan.errors] == ['担当者名がマスタに登録されていません']
+    assert [error.reason for error in plan.source.errors] == ['担当者名がマスタに登録されていません']
     assert plan.source.documents == []
 
 

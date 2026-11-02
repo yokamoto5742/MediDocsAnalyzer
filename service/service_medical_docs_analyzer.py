@@ -14,7 +14,7 @@ from service.service_data_analyzer import (TOTAL_LABEL, OverallSummary, StaffCou
                                            count_staff_documents, count_trend)
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
-from service.service_excel_reader import Draft, NoDataError, RowError, SourceData, read_documents
+from service.service_excel_reader import Draft, NoDataError, SourceData, read_documents
 from service.service_excel_writer import save_results, save_staff_results, save_trend_results
 from service.service_master import Department, Staff
 from utils.config_manager import load_config
@@ -73,21 +73,9 @@ def make_overview(drafts: list[Draft], today: date, days: int) -> Overview:
 class ImportPlan:
     """取り込みの内容。確認のため、DB に書く前に画面へ見せる"""
     source: SourceData
+    start_date: date
+    end_date: date
     deleted_count: int
-
-    @property
-    def start_date(self) -> date:
-        assert self.source.first_received_date is not None
-        return self.source.first_received_date
-
-    @property
-    def end_date(self) -> date:
-        assert self.source.last_received_date is not None
-        return self.source.last_received_date
-
-    @property
-    def errors(self) -> list[RowError]:
-        return self.source.errors
 
 
 class MedicalDocsAnalyzer:
@@ -120,13 +108,13 @@ class MedicalDocsAnalyzer:
             known_staff = {staff.name for staff in service_master.list_staff(connection)}
 
         source = read_documents(file_path, known_staff)
-        if source.first_received_date is None or source.last_received_date is None:
+        start_date, end_date = source.first_received_date, source.last_received_date
+        if start_date is None or end_date is None:
             raise NoDataError
 
         with self._open_database() as connection:
-            deleted_count = count_documents_between(connection, source.first_received_date,
-                                                    source.last_received_date)
-        return ImportPlan(source, deleted_count)
+            deleted_count = count_documents_between(connection, start_date, end_date)
+        return ImportPlan(source, start_date, end_date, deleted_count)
 
     def apply_import(self, plan: ImportPlan) -> int:
         """計画どおりに DB を書き換え、DB の件数を返す"""

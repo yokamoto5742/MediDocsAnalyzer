@@ -9,10 +9,14 @@ from openpyxl.utils.datetime import from_excel
 DATE_PATTERN = re.compile(r'\d{4}/\d{1,2}/\d{1,2}')
 RECEIVED_DATE_COLUMN = '預り日'
 REQUESTED_DATE_COLUMN = '医師依頼日'
+DOCUMENT_NAME_COLUMN = '文書名'
+DEPARTMENT_COLUMN = '診療科'
+DOCTOR_COLUMN = '医師名'
 STAFF_COLUMN = '担当者名'
 PATIENT_ID_COLUMN = '患者ID'
-TEXT_COLUMNS = ('文書名', '診療科', '医師名', STAFF_COLUMN)
-REQUIRED_COLUMNS = (RECEIVED_DATE_COLUMN, REQUESTED_DATE_COLUMN, *TEXT_COLUMNS, PATIENT_ID_COLUMN)
+# Document / Draft の文字列の項目と同じ順に並べる
+TEXT_COLUMNS = (DOCUMENT_NAME_COLUMN, DEPARTMENT_COLUMN, DOCTOR_COLUMN, STAFF_COLUMN, PATIENT_ID_COLUMN)
+REQUIRED_COLUMNS = (RECEIVED_DATE_COLUMN, REQUESTED_DATE_COLUMN, *TEXT_COLUMNS)
 
 
 class NoDataError(Exception):
@@ -80,23 +84,29 @@ def to_text(value: object) -> str:
     return '' if value is None else str(value).strip()
 
 
-def row_error_reason(cells: dict[str, object], known_staff: set[str] | None) -> str | None:
+def read_received_date(cells: dict[str, object]) -> date:
+    """預り日を返す。空か日付でなければ、エラーの理由を入れた ValueError"""
     try:
         received = to_date(cells[RECEIVED_DATE_COLUMN])
     except ValueError:
-        return '預り日が日付ではありません'
+        raise ValueError('預り日が日付ではありません') from None
     if received is None:
-        return '預り日が空です'
+        raise ValueError('預り日が空です')
+    return received
+
+
+def read_requested_date(cells: dict[str, object], received: date, known_staff: set[str] | None) -> date | None:
+    """医師依頼日を返す(空なら None)。日付でない・預り日より前・担当者がマスタにない行は、理由を入れた ValueError"""
     try:
         requested = to_date(cells[REQUESTED_DATE_COLUMN])
     except ValueError:
-        return '医師依頼日が日付ではありません'
+        raise ValueError('医師依頼日が日付ではありません') from None
     if requested is not None and requested < received:
-        return '医師依頼日が預り日より前です'
+        raise ValueError('医師依頼日が預り日より前です')
     staff = to_text(cells[STAFF_COLUMN])
     if requested is not None and staff and known_staff is not None and staff not in known_staff:
-        return '担当者名がマスタに登録されていません'
-    return None
+        raise ValueError('担当者名がマスタに登録されていません')
+    return requested
 
 
 def read_documents(file_path: str, known_staff: set[str] | None = None) -> SourceData:
@@ -129,27 +139,19 @@ def read_documents(file_path: str, known_staff: set[str] | None = None) -> Sourc
 
 def _add_row(source: SourceData, cells: dict[str, object], row_number: int, file_name: str,
              known_staff: set[str] | None) -> None:
-    # 預り日が読める行は、エラーでも取り込み範囲に含める
     try:
-        received = to_date(cells[RECEIVED_DATE_COLUMN])
-    except ValueError:
-        received = None
-    if received is not None:
+        received = read_received_date(cells)
+        # 預り日が読める行は、エラーでも取り込み範囲に含める
         source.first_received_date = min(received, source.first_received_date or received)
         source.last_received_date = max(received, source.last_received_date or received)
-
-    reason = row_error_reason(cells, known_staff)
-    if reason is not None:
+        requested = read_requested_date(cells, received, known_staff)
+    except ValueError as e:
         row_text = ' | '.join(to_text(value) for column, value in cells.items() if column != PATIENT_ID_COLUMN)
-        source.errors.append(RowError(file_name, row_number, to_text(cells[PATIENT_ID_COLUMN]), reason, row_text))
+        source.errors.append(RowError(file_name, row_number, to_text(cells[PATIENT_ID_COLUMN]), str(e), row_text))
         return
 
-    requested = to_date(cells[REQUESTED_DATE_COLUMN])
-    staff = to_text(cells[STAFF_COLUMN])
-    assert received is not None
-    texts = (to_text(cells['文書名']), to_text(cells['診療科']), to_text(cells['医師名']), staff,
-             to_text(cells[PATIENT_ID_COLUMN]))
-    if requested is None or not staff:
+    texts = [to_text(cells[column]) for column in TEXT_COLUMNS]
+    if requested is None or not to_text(cells[STAFF_COLUMN]):
         source.drafts.append(Draft(received, requested, *texts))
         return
     source.documents.append(Document(received, requested, *texts))

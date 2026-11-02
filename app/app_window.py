@@ -190,14 +190,14 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.LOAD_ERROR_MESSAGE.format(error=e))
         else:
             messagebox.showinfo(constants.COMPLETE_TITLE, constants.LOAD_COMPLETE_MESSAGE.format(count=count))
-            if plan.errors:
-                ImportErrorsDialog(self.root, plan.errors)
+            if plan.source.errors:
+                ImportErrorsDialog(self.root, plan.source.errors)
 
     @staticmethod
     def _import_confirm_message(plan: ImportPlan) -> str:
         return constants.IMPORT_CONFIRM_MESSAGE.format(
             start_date=plan.start_date, end_date=plan.end_date, deleted=plan.deleted_count,
-            inserted=len(plan.source.documents), errors=len(plan.errors))
+            inserted=len(plan.source.documents), errors=len(plan.source.errors))
 
     def _import_source(self) -> ImportPlan | None:
         """元データ(xlsm)を確認なしで取り込む。取り込めたら計画を、失敗したら None を返す"""
@@ -210,8 +210,8 @@ class MedicalDocsAnalyzerGUI:
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.LOAD_ERROR_MESSAGE.format(error=e))
             return None
-        if plan.errors:
-            ImportErrorsDialog(self.root, plan.errors)
+        if plan.source.errors:
+            ImportErrorsDialog(self.root, plan.source.errors)
         return plan
 
     def start_analysis(self) -> None:

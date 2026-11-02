@@ -105,7 +105,7 @@ def make_plan(errors: list[RowError]) -> ImportPlan:
     source = SourceData(documents=[Document(date(2025, 4, 1), date(2025, 4, 2), '診断書', '内科', '佐藤', '植田')],
                         errors=errors, drafts=[DRAFT],
                         first_received_date=date(2025, 4, 1), last_received_date=date(2025, 4, 30))
-    return ImportPlan(source, deleted_count=3)
+    return ImportPlan(source, date(2025, 4, 1), date(2025, 4, 30), deleted_count=3)
 
 
 def test_init_backs_up_database(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
