@@ -32,7 +32,7 @@ def main() -> None:
         root.destroy()
         return
     root.deiconify()
-    MedicalDocsAnalyzerGUI(root, user)
+    MedicalDocsAnalyzerGUI(root, user).start()
     root.mainloop()
 
 

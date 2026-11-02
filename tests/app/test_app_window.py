@@ -30,6 +30,13 @@ def analyze_saved_period() -> Iterator[MagicMock]:
         yield mock
 
 
+def start_gui(root: tk.Tk, user: Staff | None = None) -> MedicalDocsAnalyzerGUI:
+    """main.py と同じく、画面を作ってから起動時の処理をする"""
+    gui = MedicalDocsAnalyzerGUI(root, user)
+    gui.start()
+    return gui
+
+
 def make_overview(drafts: list[Draft]) -> Overview:
     return Overview(date(2025, 4, 1), date(2025, 4, 7), drafts)
 
@@ -54,7 +61,7 @@ def gui(config_path: Path, root: tk.Tk, messagebox: MagicMock,
         analyzer_class.return_value.list_departments.return_value = [Department('内科', 1), Department('外科', 2)]
         analyzer_class.return_value.list_staff.return_value = STAFF_LIST
         analyzer_class.return_value.trend_summary.return_value = TREND
-        yield MedicalDocsAnalyzerGUI(root)
+        yield start_gui(root)
 
 
 @pytest.fixture
@@ -82,7 +89,7 @@ def test_init_shows_fiscal_year_for_january_to_march(config_path: Path, root: tk
         config.write(f)
 
     with patch('app.app_window.MedicalDocsAnalyzer'):
-        gui = MedicalDocsAnalyzerGUI(root)
+        gui = start_gui(root)
 
     assert gui.year_var.get() == '2025'
 
@@ -120,10 +127,19 @@ def test_init_backs_up_database(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock
     analyzer.backup_database.assert_called_once_with(date.today())
 
 
+def test_init_only_builds_window(config_path: Path, root: tk.Tk) -> None:
+    with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
+        MedicalDocsAnalyzerGUI(root)
+
+    # 起動時の処理は start() で行う
+    analyzer_class.return_value.backup_database.assert_not_called()
+    analyzer_class.return_value.load_overview.assert_not_called()
+
+
 def test_init_shows_backup_error(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         analyzer_class.return_value.backup_database.side_effect = OSError('offline')
-        MedicalDocsAnalyzerGUI(root)
+        start_gui(root)
 
     messagebox.showerror.assert_called_once_with(
         constants.ERROR_TITLE, constants.BACKUP_ERROR_MESSAGE.format(error='offline'))
@@ -137,7 +153,7 @@ def test_init_shows_overview(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -
 def test_init_shows_overview_error_without_dialog(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         analyzer_class.return_value.load_overview.side_effect = FileNotFoundError('missing')
-        gui = MedicalDocsAnalyzerGUI(root)
+        gui = start_gui(root)
 
     assert gui.result_view.overview_title.cget('text') == constants.OVERVIEW_ERROR_FORMAT.format(error='missing')
     messagebox.showerror.assert_not_called()
@@ -326,7 +342,7 @@ def test_export_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, me
 
 def test_staff_user_sees_only_own_summary(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
-        gui = MedicalDocsAnalyzerGUI(root, Staff(2, '花﨑', 2, emr_id='S01'))
+        gui = start_gui(root, Staff(2, '花﨑', 2, emr_id='S01'))
         analyzer = analyzer_class.return_value
         analyzer.prepare_source_import.return_value = make_plan([])
         analyzer.overall_summary.return_value = make_summary()
@@ -346,7 +362,7 @@ def test_staff_user_sees_only_own_summary(config_path: Path, root: tk.Tk, messag
 
 def test_admin_user_can_use_everything(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
     with patch('app.app_window.MedicalDocsAnalyzer'):
-        gui = MedicalDocsAnalyzerGUI(root, Staff(1, '植田', 1, emr_id='A01', role=ADMIN_ROLE))
+        gui = start_gui(root, Staff(1, '植田', 1, emr_id='A01', role=ADMIN_ROLE))
 
     assert gui.restricted_staff is None
     assert not any(button.instate(['disabled']) for button in gui.admin_buttons)
@@ -432,7 +448,7 @@ def test_refresh_staff_trend_restores_and_saves_selection(config_path: Path, roo
         analyzer.list_departments.return_value = [Department('内科', 1), Department('外科', 2)]
         analyzer.list_staff.return_value = STAFF_LIST
         analyzer.trend_summary.return_value = TREND
-        gui = MedicalDocsAnalyzerGUI(root)
+        gui = start_gui(root)
 
     staff_trend = gui.result_view.staff_trend
     assert (staff_trend.selected_staff(), staff_trend.selected_department()) == ('花﨑', '外科')
@@ -458,7 +474,7 @@ def test_init_restores_saved_trend_settings(config_path: Path, root: tk.Tk) -> N
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         analyzer_class.return_value.list_departments.return_value = [Department('内科', 1), Department('外科', 2)]
         analyzer_class.return_value.trend_summary.return_value = TREND
-        gui = MedicalDocsAnalyzerGUI(root)
+        gui = start_gui(root)
 
     assert gui.result_view.trend.selected_department() == '外科'
     analyzer_class.return_value.trend_summary.assert_called_once_with(
@@ -529,7 +545,7 @@ def test_staff_user_sees_only_own_staff_trend(config_path: Path, root: tk.Tk, me
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         analyzer_class.return_value.list_departments.return_value = [Department('内科', 1)]
         analyzer_class.return_value.trend_summary.return_value = TREND
-        gui = MedicalDocsAnalyzerGUI(root, Staff(2, '花﨑', 2, emr_id='S01'))
+        gui = start_gui(root, Staff(2, '花﨑', 2, emr_id='S01'))
 
     view = gui.result_view
     assert view.notebook.tab(view.trend_tab, 'state') == 'hidden'

@@ -1,4 +1,5 @@
 import tkinter as tk
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from tkinter import messagebox, ttk
@@ -60,6 +61,9 @@ class MedicalDocsAnalyzerGUI:
         # 画面に出している集計の期間。未集計なら None
         self.period: tuple[date, date] | None = None
         self._setup_gui()
+
+    def start(self) -> None:
+        """起動時の処理。DB のバックアップ、概要と推移の表示、前回の期間の集計をする"""
         self.backup_database()
         self.refresh_overview()
         self.load_trend()
@@ -194,19 +198,7 @@ class MedicalDocsAnalyzerGUI:
 
     def load_excel(self) -> None:
         """旧 DB(xlsx)を確認してから取り込む"""
-        try:
-            plan = self.analyzer.prepare_legacy_import()
-            if not messagebox.askyesno(constants.CONFIRM_TITLE, self._import_confirm_message(plan)):
-                return
-            count = self.analyzer.apply_import(plan)
-        except NoDataError:
-            messagebox.showerror(constants.ERROR_TITLE, constants.NO_SOURCE_DATA_MESSAGE)
-        except Exception as e:
-            messagebox.showerror(constants.ERROR_TITLE, constants.LOAD_ERROR_MESSAGE.format(error=e))
-        else:
-            messagebox.showinfo(constants.COMPLETE_TITLE, constants.LOAD_COMPLETE_MESSAGE.format(count=count))
-            if plan.source.errors:
-                ImportErrorsDialog(self.root, plan.source.errors)
+        self._import(self.analyzer.prepare_legacy_import, confirm=True)
 
     @staticmethod
     def _import_confirm_message(plan: ImportPlan) -> str:
@@ -214,17 +206,22 @@ class MedicalDocsAnalyzerGUI:
             start_date=plan.start_date, end_date=plan.end_date, deleted=plan.deleted_count,
             inserted=len(plan.source.documents), errors=len(plan.source.errors))
 
-    def _import_source(self) -> ImportPlan | None:
-        """元データ(xlsm)を確認なしで取り込む。取り込めたら計画を、失敗したら None を返す"""
+    def _import(self, prepare: Callable[[], ImportPlan], confirm: bool) -> ImportPlan | None:
+        """prepare で作った計画どおりに取り込み、計画を返す。やめたか失敗したら None。
+        confirm なら取り込む前に件数を確かめ、取り込んだ後に DB の件数を知らせる"""
         try:
-            plan = self.analyzer.prepare_source_import()
-            self.analyzer.apply_import(plan)
+            plan = prepare()
+            if confirm and not messagebox.askyesno(constants.CONFIRM_TITLE, self._import_confirm_message(plan)):
+                return None
+            count = self.analyzer.apply_import(plan)
         except NoDataError:
             messagebox.showerror(constants.ERROR_TITLE, constants.NO_SOURCE_DATA_MESSAGE)
             return None
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.LOAD_ERROR_MESSAGE.format(error=e))
             return None
+        if confirm:
+            messagebox.showinfo(constants.COMPLETE_TITLE, constants.LOAD_COMPLETE_MESSAGE.format(count=count))
         if plan.source.errors:
             ImportErrorsDialog(self.root, plan.source.errors)
         return plan
@@ -236,7 +233,8 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, str(e))
             return
 
-        plan = self._import_source()
+        # 元データ(xlsm)は確認なしで取り込む
+        plan = self._import(self.analyzer.prepare_source_import, confirm=False)
         if plan is None:
             return
         self.refresh_overview(plan.source.drafts)

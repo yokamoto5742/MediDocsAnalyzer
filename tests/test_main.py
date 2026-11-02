@@ -43,6 +43,7 @@ def test_main_starts_gui_after_login(mock_tk: MagicMock, mock_gui: MagicMock) ->
         main()
 
     mock_gui.assert_called_once_with(mock_tk.return_value, user)
+    mock_gui.return_value.start.assert_called_once_with()
     mock_tk.return_value.deiconify.assert_called_once()
     mock_tk.return_value.mainloop.assert_called_once()
 
