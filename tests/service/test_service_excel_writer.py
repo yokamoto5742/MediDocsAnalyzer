@@ -7,7 +7,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from service import service_excel_writer
-from service.service_data_analyzer import DocumentCounts, StaffCounts, TrendCounts
+from service.service_data_analyzer import DocumentCounts, OverallSummary, StaffCounts, TrendCounts
 from service.service_excel_writer import save_results, save_staff_results, save_trend_results
 
 TITLE = '医療文書作成件数'
@@ -39,7 +39,7 @@ def test_save_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         last_date=date(2025, 5, 20),
     )
 
-    output_path = save_results(counts, ['植田', '花﨑'], ['合計', '内科', '外科'],
+    output_path = save_results(OverallSummary(counts, ['植田', '花﨑'], ['内科', '外科']),
                                str(template_path), str(tmp_path / 'output'))
 
     assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数20250401-20250520.xlsx'

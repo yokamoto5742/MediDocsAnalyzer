@@ -7,6 +7,7 @@ from service.service_excel_reader import NoDataError
 from utils.date_period import fiscal_year, get_period_range
 
 PERIOD_CONDITION = 'received_date BETWEEN ? AND ?'
+TOTAL_LABEL = '合計'
 
 
 @dataclass
@@ -16,6 +17,27 @@ class DocumentCounts:
     total: int
     first_date: date
     last_date: date
+
+
+@dataclass
+class OverallSummary:
+    counts: DocumentCounts
+    staff_members: list[str]
+    departments: list[str]
+
+    @property
+    def rows(self) -> list[list[str | int]]:
+        """全体の表の行。[氏名, 合計, 診療科ごとの件数...] を担当者ごとに並べ、最後に合計行を置く。
+        担当者の合計は並べた診療科だけ、合計行の合計は一覧にない担当者・診療科も含めた全体の件数"""
+        counts = self.counts
+        rows: list[list[str | int]] = []
+        for staff in self.staff_members:
+            department_counts = [counts.by_staff_department.get((staff, department), 0)
+                                 for department in self.departments]
+            rows.append([staff, sum(department_counts), *department_counts])
+        rows.append([TOTAL_LABEL, counts.total,
+                     *(counts.by_department.get(department, 0) for department in self.departments)])
+        return rows
 
 
 @dataclass

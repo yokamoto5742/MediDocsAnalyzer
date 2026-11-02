@@ -4,13 +4,24 @@ from datetime import date
 
 import pytest
 
-from service.service_data_analyzer import count_documents, count_staff_documents, count_trend, months_between
+from service.service_data_analyzer import (DocumentCounts, OverallSummary, count_documents, count_staff_documents,
+                                           count_trend, months_between)
 from service.service_database import connect, replace_documents_between
 from service.service_excel_reader import Document, NoDataError
 
 
 def document(received: date, department: str, staff: str) -> Document:
     return Document(received, received, '診断書', department, '佐藤', staff)
+
+
+def test_overall_summary_rows() -> None:
+    counts = DocumentCounts({('植田', '内科'): 2, ('植田', '小児科'): 1, ('花﨑', '外科'): 1, ('外部', '内科'): 1},
+                            {'内科': 3, '小児科': 1, '外科': 1}, 5, date(2025, 4, 1), date(2025, 4, 30))
+
+    rows = OverallSummary(counts, ['植田', '花﨑'], ['内科', '外科']).rows
+
+    # 担当者の合計は並べた診療科だけ、合計行の合計は一覧にない担当者・診療科も含める
+    assert rows == [['植田', 2, 2, 0], ['花﨑', 1, 0, 1], ['合計', 5, 3, 1]]
 
 
 @pytest.fixture

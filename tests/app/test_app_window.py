@@ -10,10 +10,10 @@ import pytest
 from app import constants
 from app.app_window import MedicalDocsAnalyzerGUI
 from app.result_view import TrendPanel
-from service.service_data_analyzer import DocumentCounts, StaffCounts, TrendCounts
+from service.service_data_analyzer import DocumentCounts, OverallSummary, StaffCounts, TrendCounts
 from service.service_excel_reader import Document, Draft, NoDataError, RowError, SourceData
 from service.service_master import ADMIN_ROLE, Department, Staff
-from service.service_medical_docs_analyzer import ImportPlan, OverallSummary, Overview
+from service.service_medical_docs_analyzer import ImportPlan, Overview
 from utils.config_manager import load_config, save_config
 
 DRAFT = Draft(date(2025, 4, 1), None, '診断書', '内科', '佐藤', '', '1')
@@ -189,7 +189,7 @@ def test_load_excel_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock
 def make_summary() -> OverallSummary:
     counts = DocumentCounts({('植田', '内科'): 2, ('花﨑', '外科'): 1}, {'内科': 2, '外科': 1}, 3,
                             date(2025, 10, 1), date(2025, 12, 31))
-    return OverallSummary(counts, ['植田', '花﨑'], ['合計', '内科', '外科'])
+    return OverallSummary(counts, ['植田', '花﨑'], ['内科', '外科'])
 
 
 def make_staff_counts(name: str) -> StaffCounts:

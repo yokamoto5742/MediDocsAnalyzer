@@ -10,12 +10,12 @@ from pathlib import Path
 from service import service_auth, service_master
 from service.service_auth import LoginResult
 from service.service_backup import backup_database_daily
-from service.service_data_analyzer import (DocumentCounts, StaffCounts, TrendCounts, count_documents,
+from service.service_data_analyzer import (TOTAL_LABEL, OverallSummary, StaffCounts, TrendCounts, count_documents,
                                            count_staff_documents, count_trend)
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
 from service.service_excel_reader import Draft, NoDataError, RowError, SourceData, read_documents
-from service.service_excel_writer import TOTAL_LABEL, save_results, save_staff_results, save_trend_results
+from service.service_excel_writer import save_results, save_staff_results, save_trend_results
 from service.service_master import Department, Staff
 from utils.config_manager import load_config
 
@@ -88,13 +88,6 @@ class ImportPlan:
     @property
     def errors(self) -> list[RowError]:
         return self.source.errors
-
-
-@dataclass
-class OverallSummary:
-    counts: DocumentCounts
-    staff_members: list[str]
-    departments: list[str]  # 先頭は合計列
 
 
 class MedicalDocsAnalyzer:
@@ -208,7 +201,7 @@ class MedicalDocsAnalyzer:
         # 退職した担当者も、期間内に件数があれば並べる
         counted_staff = {staff for staff, _ in counts.by_staff_department}
         staff_members = [staff.name for staff in staff_list if staff.active or staff.name in counted_staff]
-        return OverallSummary(counts, staff_members, [TOTAL_LABEL, *(department.name for department in departments)])
+        return OverallSummary(counts, staff_members, [department.name for department in departments])
 
     def staff_summary(self, staff_name: str, start_date: date, end_date: date,
                       document_limit: int | None = None) -> StaffCounts:
@@ -239,10 +232,4 @@ class MedicalDocsAnalyzer:
         """期間内の文書を集計して Excel に保存し、保存先のパスを返す"""
         paths_config = load_config()['PATHS']
         summary = self.overall_summary(start_date, end_date)
-        return save_results(
-            summary.counts,
-            summary.staff_members,
-            summary.departments,
-            paths_config['template_path'],
-            paths_config['output_dir'],
-        )
+        return save_results(summary, paths_config['template_path'], paths_config['output_dir'])

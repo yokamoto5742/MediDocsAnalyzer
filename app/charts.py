@@ -6,8 +6,7 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
 from app import constants
-from service.service_data_analyzer import StaffCounts, TrendCounts
-from service.service_medical_docs_analyzer import OverallSummary
+from service.service_data_analyzer import OverallSummary, StaffCounts, TrendCounts
 
 # 日本語を表示できるフォントを、Windows に入っている順に試す
 rcParams['font.family'] = ['Meiryo', 'Yu Gothic', 'MS Gothic', 'sans-serif']
@@ -22,7 +21,7 @@ def overall_figure(summary: OverallSummary) -> Figure:
     # 上から表と同じ順に並べるため、下から積む
     staff_members = summary.staff_members[::-1]
     lefts = [0] * len(staff_members)
-    for department in summary.departments[1:]:
+    for department in summary.departments:
         widths = [summary.counts.by_staff_department.get((staff, department), 0) for staff in staff_members]
         if any(widths):
             axes.barh(staff_members, widths, left=lefts, label=department)

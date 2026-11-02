@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [1.13.6] - 2026-11-02
+
+### 変更
+- 全体の表の行を `OverallSummary.rows` にまとめ、画面と Excel 出力の両方で使うようにした(別々に組み立てていた)。`OverallSummary.departments` には診療科だけを入れ、合計列は表示するときに足す
+- `OverallSummary` と「合計」の文言 `TOTAL_LABEL` を `service_data_analyzer` に移した。`save_results` の引数は `(summary, template_path, output_dir)` にした
+
 ## [1.13.5] - 2026-11-02
 
 ### 変更

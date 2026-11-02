@@ -1,5 +1,5 @@
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from tkinter import ttk
 from typing import cast
 
@@ -9,9 +9,9 @@ from tkcalendar import DateEntry
 
 from app import constants
 from app.charts import overall_figure, staff_figure, trend_figure
-from service.service_data_analyzer import StaffCounts, TrendCounts
+from service.service_data_analyzer import OverallSummary, StaffCounts, TrendCounts
 from service.service_excel_reader import Draft
-from service.service_medical_docs_analyzer import DraftStatus, OverallSummary, Overview, draft_status
+from service.service_medical_docs_analyzer import DraftStatus, Overview, draft_status
 
 OVERVIEW_COLUMN_WIDTHS = (90, 80, 240, 100, 90, 80, 90, 150)
 
@@ -34,19 +34,8 @@ def add_vertical_scrollbar(parent: ttk.Frame, tree: ttk.Treeview, row: int, colu
     tree.configure(yscrollcommand=scrollbar.set)
 
 
-def overall_rows(summary: OverallSummary) -> list[list[object]]:
-    """Excel 出力と同じ行。合計列は並べた診療科の合計、最終行の合計は一覧にない診療科も含めた全体の件数"""
-    counts = summary.counts
-    departments = summary.departments[1:]
-    rows: list[list[object]] = []
-    for staff in summary.staff_members:
-        department_counts = [counts.by_staff_department.get((staff, d), 0) for d in departments]
-        rows.append([staff, sum(department_counts), *department_counts])
-    rows.append([constants.TOTAL_ROW_LABEL, counts.total, *(counts.by_department.get(d, 0) for d in departments)])
-    return rows
-
-
-def fill_tree(tree: ttk.Treeview, columns: list[str], rows: list[list[object]], first_width: int = 120) -> None:
+def fill_tree(tree: ttk.Treeview, columns: list[str], rows: Sequence[Sequence[object]],
+              first_width: int = 120) -> None:
     tree.delete(*tree.get_children())
     tree.configure(columns=columns)
     for index, column in enumerate(columns):
@@ -55,7 +44,7 @@ def fill_tree(tree: ttk.Treeview, columns: list[str], rows: list[list[object]], 
         width = first_width if index == 0 else max(60, 16 * len(column) + 16)
         tree.column(column, width=width, minwidth=width, anchor=tk.W if index == 0 else tk.E)
     for row in rows:
-        tree.insert('', tk.END, values=row)
+        tree.insert('', tk.END, values=list(row))
 
 
 class ChartArea:
@@ -173,8 +162,8 @@ class ResultView:
         # 職員としてログインしたときの本人の氏名。None なら全員分を見られる
         self.restricted_staff: str | None = None
         # 全体の表の担当者の行と合計行。並べ替えても合計行は最後に置く
-        self.overall_staff_rows: list[list[object]] = []
-        self.overall_total_row: list[object] = []
+        self.overall_staff_rows: list[list[str | int]] = []
+        self.overall_total_row: list[str | int] = []
         # 並べ替えている列の番号と降順かどうか。None なら表示順のまま
         self.overall_sort: tuple[int, bool] | None = None
         self.notebook = ttk.Notebook(parent)
@@ -270,8 +259,8 @@ class ResultView:
         counts = summary.counts
         self.overall_title.configure(text=constants.OVERALL_TITLE_FORMAT.format(
             first=counts.first_date, last=counts.last_date, total=counts.total))
-        columns = [constants.STAFF_NAME_HEADER, *summary.departments]
-        rows = overall_rows(summary)
+        columns = [constants.STAFF_NAME_HEADER, constants.TOTAL_ROW_LABEL, *summary.departments]
+        rows = summary.rows
         self.overall_staff_rows, self.overall_total_row = rows[:-1], rows[-1]
         self.overall_sort = None
         fill_tree(self.overall_tree, columns, rows)
