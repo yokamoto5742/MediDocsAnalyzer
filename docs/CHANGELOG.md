@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [1.13.11] - 2026-11-02
+
+### 変更
+- 共通のデータ型(`Document`、`Draft`、`RowError`、`SourceData`、`NoDataError`)を `service/models.py` に移した。DB と集計が Excel の読み込みに依存しないようにした
+- 概要(`DraftStatus`、`Overview`、`make_overview`)を `service/service_overview.py` に分けた
+- 預り日の期間の条件(`PERIOD_CONDITION`)を `service_database` に置き、取り込みの削除・件数と集計で共用するようにした
+- DB の行から担当者を作る処理を `service_master.staff_from_row` にまとめ、ログインでも使うようにした
+
 ## [1.13.10] - 2026-11-02
 
 ### 変更

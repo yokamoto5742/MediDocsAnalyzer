@@ -3,10 +3,10 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 
-from service.service_excel_reader import NoDataError
+from service.models import NoDataError
+from service.service_database import PERIOD_CONDITION, period_parameters
 from utils.date_period import fiscal_year, get_period_range
 
-PERIOD_CONDITION = 'received_date BETWEEN ? AND ?'
 TOTAL_LABEL = '合計'
 
 
@@ -71,10 +71,6 @@ class TrendCounts:
         """1 行が 1 年で、年の名前・12 か月の件数・合計を並べる"""
         return [[self.year_label(year), *counts, sum(count for count in counts if count is not None)]
                 for year, counts in self.by_year]
-
-
-def period_parameters(start_date: date, end_date: date) -> tuple[str, str]:
-    return start_date.isoformat(), end_date.isoformat()
 
 
 def count_documents(connection: sqlite3.Connection, start_date: date, end_date: date) -> DocumentCounts:

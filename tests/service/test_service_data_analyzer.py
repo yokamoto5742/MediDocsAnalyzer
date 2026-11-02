@@ -4,10 +4,10 @@ from datetime import date
 
 import pytest
 
+from service.models import Document, NoDataError
 from service.service_data_analyzer import (DocumentCounts, OverallSummary, count_documents, count_staff_documents,
                                            count_trend, months_between)
 from service.service_database import connect, replace_documents_between
-from service.service_excel_reader import Document, NoDataError
 
 
 def document(received: date, department: str, staff: str) -> Document:

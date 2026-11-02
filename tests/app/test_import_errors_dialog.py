@@ -8,7 +8,7 @@ import pytest
 
 from app import constants
 from app.import_errors_dialog import ImportErrorsDialog
-from service.service_excel_reader import RowError
+from service.models import RowError
 
 ERRORS = [RowError('元データ.xlsm', 5, '123', '預り日が空です', ' | 花﨑')]
 

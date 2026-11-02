@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
-from service.service_excel_reader import Document, Draft, read_documents, to_date
+from service.models import Document, Draft
+from service.service_excel_reader import read_documents, to_date
 from tests.service.conftest import MakeWorkbook
 
 

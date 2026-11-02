@@ -3,7 +3,7 @@ from collections.abc import Callable
 from tkinter import filedialog, messagebox, ttk
 
 from app import constants
-from service.service_medical_docs_analyzer import DEFAULT_PENDING_DAYS
+from service.service_overview import DEFAULT_PENDING_DAYS
 from utils.config_manager import load_config, update_config
 
 EXCEL_FILE_TYPES = [(constants.EXCEL_FILE_TYPE_LABEL, '*.xlsx *.xlsm')]

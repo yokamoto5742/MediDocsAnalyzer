@@ -1,8 +1,12 @@
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 ADMIN_ROLE = 'admin'
 STAFF_ROLE = 'staff'
+# staff_from_row に渡す行の列
+STAFF_COLUMNS = 'id, name, display_order, active, emr_id, role'
 
 
 @dataclass
@@ -31,11 +35,15 @@ def seed_masters(connection: sqlite3.Connection, staff_names: list[str], departm
                                [(name, order) for order, name in enumerate(departments, start=1)])
 
 
+def staff_from_row(row: Sequence[Any]) -> Staff:
+    """STAFF_COLUMNS の順に並んだ行から担当者を作る"""
+    id_, name, order, active, emr_id, role = row
+    return Staff(id_, name, order, bool(active), emr_id or '', role)
+
+
 def list_staff(connection: sqlite3.Connection) -> list[Staff]:
-    rows = connection.execute(
-        'SELECT id, name, display_order, active, emr_id, role FROM staff ORDER BY display_order, id')
-    return [Staff(id_, name, order, bool(active), emr_id or '', role)
-            for id_, name, order, active, emr_id, role in rows]
+    rows = connection.execute(f'SELECT {STAFF_COLUMNS} FROM staff ORDER BY display_order, id')
+    return [staff_from_row(row) for row in rows]
 
 
 def save_staff(connection: sqlite3.Connection, staff: Staff) -> None:

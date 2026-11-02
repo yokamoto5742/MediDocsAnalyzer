@@ -6,7 +6,7 @@ from tkinter import messagebox, ttk
 
 from app import constants
 from app.folder import open_folder_of
-from service.service_excel_reader import RowError
+from service.models import RowError
 from utils.config_manager import load_config
 
 

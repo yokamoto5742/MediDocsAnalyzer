@@ -10,10 +10,11 @@ import pytest
 from app import constants
 from app.app_window import MedicalDocsAnalyzerGUI
 from app.result_view import TrendPanel
+from service.models import Document, Draft, NoDataError, RowError, SourceData
 from service.service_data_analyzer import DocumentCounts, OverallSummary, StaffCounts, TrendCounts
-from service.service_excel_reader import Document, Draft, NoDataError, RowError, SourceData
 from service.service_master import ADMIN_ROLE, Department, Staff
-from service.service_medical_docs_analyzer import ImportPlan, Overview
+from service.service_medical_docs_analyzer import ImportPlan
+from service.service_overview import Overview
 from utils.config_manager import load_config, save_config
 
 DRAFT = Draft(date(2025, 4, 1), None, '診断書', '内科', '佐藤', '', '1')

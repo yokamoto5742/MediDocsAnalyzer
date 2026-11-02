@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 from app.charts import overall_figure, staff_figure, trend_figure
 from app import constants
 from app.result_view import ResultView
+from service.models import Draft
 from service.service_data_analyzer import DocumentCounts, OverallSummary, StaffCounts, TrendCounts
-from service.service_excel_reader import Draft
-from service.service_medical_docs_analyzer import Overview
+from service.service_overview import Overview
 
 SUMMARY = OverallSummary(
     DocumentCounts({('植田', '内科'): 2, ('植田', '小児科'): 1, ('花﨑', '外科'): 1},

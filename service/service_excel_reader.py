@@ -1,10 +1,11 @@
 import re
-from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
 from openpyxl import load_workbook
 from openpyxl.utils.datetime import from_excel
+
+from service.models import Document, Draft, RowError, SourceData
 
 DATE_PATTERN = re.compile(r'\d{4}/\d{1,2}/\d{1,2}')
 RECEIVED_DATE_COLUMN = '預り日'
@@ -17,51 +18,6 @@ PATIENT_ID_COLUMN = '患者ID'
 # Document / Draft の文字列の項目と同じ順に並べる
 TEXT_COLUMNS = (DOCUMENT_NAME_COLUMN, DEPARTMENT_COLUMN, DOCTOR_COLUMN, STAFF_COLUMN, PATIENT_ID_COLUMN)
 REQUIRED_COLUMNS = (RECEIVED_DATE_COLUMN, REQUESTED_DATE_COLUMN, *TEXT_COLUMNS)
-
-
-class NoDataError(Exception):
-    """対象となるデータが 1 件もない"""
-
-
-@dataclass(frozen=True)
-class Document:
-    received_date: date
-    requested_date: date
-    document_name: str
-    department: str
-    doctor_name: str
-    staff_name: str
-    patient_id: str = ''
-
-
-@dataclass(frozen=True)
-class Draft:
-    """医師依頼日か担当者名が空の行(下書き)"""
-    received_date: date
-    requested_date: date | None
-    document_name: str
-    department: str
-    doctor_name: str
-    staff_name: str
-    patient_id: str
-
-
-@dataclass(frozen=True)
-class RowError:
-    file_name: str
-    row_number: int
-    patient_id: str
-    reason: str
-    row_text: str
-
-
-@dataclass
-class SourceData:
-    documents: list[Document] = field(default_factory=list)
-    errors: list[RowError] = field(default_factory=list)
-    drafts: list[Draft] = field(default_factory=list)
-    first_received_date: date | None = None
-    last_received_date: date | None = None
 
 
 def to_date(value: object) -> date | None:

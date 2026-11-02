@@ -4,9 +4,11 @@ from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 
-from service.service_excel_reader import Document
+from service.models import Document
 
 BUSY_TIMEOUT_SECONDS = 10
+# 集計・取り込みの対象にする期間は預り日で決める
+PERIOD_CONDITION = 'received_date BETWEEN ? AND ?'
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -70,16 +72,20 @@ def count_all_documents(connection: sqlite3.Connection) -> int:
     return connection.execute('SELECT COUNT(*) FROM documents').fetchone()[0]
 
 
+def period_parameters(start_date: date, end_date: date) -> tuple[str, str]:
+    """PERIOD_CONDITION に渡す値"""
+    return start_date.isoformat(), end_date.isoformat()
+
+
 def count_documents_between(connection: sqlite3.Connection, start_date: date, end_date: date) -> int:
-    return connection.execute('SELECT COUNT(*) FROM documents WHERE received_date BETWEEN ? AND ?',
-                              (start_date.isoformat(), end_date.isoformat())).fetchone()[0]
+    return connection.execute(f'SELECT COUNT(*) FROM documents WHERE {PERIOD_CONDITION}',
+                              period_parameters(start_date, end_date)).fetchone()[0]
 
 
 def replace_documents_between(connection: sqlite3.Connection, start_date: date, end_date: date,
                               documents: list[Document]) -> None:
     """預り日が start_date〜end_date の文書を消して、documents を入れ直す"""
-    connection.execute('DELETE FROM documents WHERE received_date BETWEEN ? AND ?',
-                       (start_date.isoformat(), end_date.isoformat()))
+    connection.execute(f'DELETE FROM documents WHERE {PERIOD_CONDITION}', period_parameters(start_date, end_date))
     connection.executemany(
         'INSERT INTO documents (received_date, requested_date, document_name, department, doctor_name, staff_name,'
         ' patient_id) VALUES (?, ?, ?, ?, ?, ?, ?)',

@@ -4,7 +4,7 @@ import secrets
 import sqlite3
 from dataclasses import dataclass
 
-from service.service_master import ADMIN_ROLE, Staff
+from service.service_master import ADMIN_ROLE, STAFF_COLUMNS, Staff, staff_from_row
 
 HASH_ITERATIONS = 200_000
 MIN_PASSWORD_LENGTH = 6
@@ -44,11 +44,11 @@ def set_password(connection: sqlite3.Connection, staff_id: int, password: str, m
 def authenticate(connection: sqlite3.Connection, emr_id: str, password: str) -> LoginResult | None:
     """電子カルテIDとパスワードが合う在籍中の担当者を返す。合わなければ None"""
     row = connection.execute(
-        'SELECT id, name, display_order, active, emr_id, role, password_hash, password_salt, must_change_password'
+        f'SELECT {STAFF_COLUMNS}, password_hash, password_salt, must_change_password'
         ' FROM staff WHERE emr_id = ? AND active = 1 AND password_hash IS NOT NULL', (emr_id,)).fetchone()
     if row is None:
         return None
-    id_, name, order, active, emr_id, role, password_hash, salt, must_change = row
+    *staff_values, password_hash, salt, must_change = row
     if not hmac.compare_digest(hash_password(password, bytes.fromhex(salt)), password_hash):
         return None
-    return LoginResult(Staff(id_, name, order, bool(active), emr_id, role), bool(must_change))
+    return LoginResult(staff_from_row(staff_values), bool(must_change))

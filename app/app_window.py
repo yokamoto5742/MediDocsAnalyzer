@@ -13,8 +13,8 @@ from app.login_dialog import ChangePasswordDialog
 from app.master_dialog import MasterDialog
 from app.result_view import ResultView, TrendPanel
 from app.settings_dialog import SettingsDialog
+from service.models import Draft, NoDataError
 from service.service_data_analyzer import trend_subject
-from service.service_excel_reader import Draft, NoDataError
 from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
 from utils.config_manager import load_config, update_config

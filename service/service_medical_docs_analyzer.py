@@ -1,72 +1,30 @@
 import sqlite3
-from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, timedelta
-from enum import StrEnum
+from datetime import date
 from pathlib import Path
 
 from service import service_auth, service_master
+from service.models import Draft, NoDataError, SourceData
 from service.service_auth import LoginResult
 from service.service_backup import backup_database_daily
 from service.service_data_analyzer import (TOTAL_LABEL, OverallSummary, StaffCounts, TrendCounts, count_documents,
                                            count_staff_documents, count_trend)
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
-from service.service_excel_reader import Draft, NoDataError, SourceData, read_documents
+from service.service_excel_reader import read_documents
 from service.service_excel_writer import save_results, save_staff_results, save_trend_results
 from service.service_master import Department, Staff
+from service.service_overview import DEFAULT_PENDING_DAYS, Overview, make_overview
 from utils.config_manager import load_config
 
 DEFAULT_KEEP_GENERATIONS = 30
 TOP_DOCUMENT_COUNT = 10
-DEFAULT_PENDING_DAYS = 7
 
 
 def split_list(text: str) -> list[str]:
     return [item.strip() for item in text.split(',') if item.strip()]
-
-
-class DraftStatus(StrEnum):
-    NOT_STARTED = '未着手'
-    INCOMPLETE = '未完了'
-    UNASSIGNED = '担当不明'
-
-
-def draft_status(draft: Draft) -> DraftStatus:
-    """下書きは担当者名か医師依頼日の少なくとも一方が空"""
-    if draft.staff_name:
-        return DraftStatus.INCOMPLETE
-    return DraftStatus.NOT_STARTED if draft.requested_date is None else DraftStatus.UNASSIGNED
-
-
-@dataclass
-class Overview:
-    """預り日が start_date〜end_date の下書き(担当者名か医師依頼日が空の行)"""
-    start_date: date
-    end_date: date
-    drafts: list[Draft]
-
-    @property
-    def status_counts(self) -> Counter[DraftStatus]:
-        return Counter(draft_status(draft) for draft in self.drafts)
-
-    @property
-    def department_status_counts(self) -> list[tuple[str, Counter[DraftStatus]]]:
-        """診療科ごとの状態別の件数を、件数の多い順に返す"""
-        by_department: dict[str, Counter[DraftStatus]] = {}
-        for draft in self.drafts:
-            by_department.setdefault(draft.department, Counter())[draft_status(draft)] += 1
-        return sorted(by_department.items(), key=lambda item: (-item[1].total(), item[0]))
-
-
-def make_overview(drafts: list[Draft], today: date, days: int) -> Overview:
-    """本日を含めて days 日間に預かった下書きを、預り日の新しい順に並べる"""
-    start_date = today - timedelta(days=days - 1)
-    targets = [draft for draft in drafts if start_date <= draft.received_date <= today]
-    targets.sort(key=lambda draft: draft.received_date, reverse=True)
-    return Overview(start_date, today, targets)
 
 
 @dataclass

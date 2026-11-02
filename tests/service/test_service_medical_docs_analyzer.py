@@ -5,11 +5,10 @@ from unittest.mock import MagicMock
 import pytest
 from openpyxl import Workbook, load_workbook
 
+from service.models import NoDataError
 from service.service_database import open_database
-from service.service_excel_reader import Draft, NoDataError
 from service.service_master import Department
-from service.service_medical_docs_analyzer import (TOP_DOCUMENT_COUNT, DraftStatus, MedicalDocsAnalyzer,
-                                                   draft_status, make_overview, split_list)
+from service.service_medical_docs_analyzer import TOP_DOCUMENT_COUNT, MedicalDocsAnalyzer, split_list
 from tests.service.conftest import MakeWorkbook
 from utils.config_manager import load_config, save_config
 
@@ -22,44 +21,6 @@ def database_rows(config_path: Path) -> list[tuple[str, str]]:
 
 def test_split_list() -> None:
     assert split_list(' 植田, 花﨑 ,,') == ['植田', '花﨑']
-
-
-def make_draft(received: date, requested: date | None = None, staff: str = '') -> Draft:
-    return Draft(received, requested, '診断書', '内科', '佐藤', staff, '1')
-
-
-def test_make_overview_keeps_drafts_within_days_newest_first() -> None:
-    drafts = [make_draft(date(2026, 10, 24)), make_draft(date(2026, 10, 25), staff='植田'),
-              make_draft(date(2026, 10, 31), requested=date(2026, 10, 31)), make_draft(date(2026, 11, 1))]
-
-    overview = make_overview(drafts, date(2026, 10, 31), 7)
-
-    assert (overview.start_date, overview.end_date) == (date(2026, 10, 25), date(2026, 10, 31))
-    assert [draft.received_date for draft in overview.drafts] == [date(2026, 10, 31), date(2026, 10, 25)]
-
-
-@pytest.mark.parametrize(('requested', 'staff', 'expected'), [
-    (None, '', DraftStatus.NOT_STARTED),
-    (None, '植田', DraftStatus.INCOMPLETE),
-    (date(2026, 10, 31), '', DraftStatus.UNASSIGNED),
-])
-def test_draft_status(requested: date | None, staff: str, expected: DraftStatus) -> None:
-    assert draft_status(make_draft(date(2026, 10, 31), requested, staff)) == expected
-
-
-def test_overview_counts_status_by_department() -> None:
-    drafts = [make_draft(date(2026, 10, 31)), make_draft(date(2026, 10, 31), staff='植田'),
-              make_draft(date(2026, 10, 31)),
-              Draft(date(2026, 10, 31), date(2026, 10, 31), '診断書', '外科', '佐藤', '', '1')]
-
-    overview = make_overview(drafts, date(2026, 10, 31), 1)
-
-    assert overview.status_counts == {DraftStatus.NOT_STARTED: 2, DraftStatus.INCOMPLETE: 1,
-                                      DraftStatus.UNASSIGNED: 1}
-    assert overview.department_status_counts == [
-        ('内科', {DraftStatus.NOT_STARTED: 2, DraftStatus.INCOMPLETE: 1}),
-        ('外科', {DraftStatus.UNASSIGNED: 1}),
-    ]
 
 
 def test_load_overview_reads_source_with_configured_days(config_path: Path, make_workbook: MakeWorkbook) -> None:

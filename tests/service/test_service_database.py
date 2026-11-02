@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from service.models import Document
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
-from service.service_excel_reader import Document
 
 
 def document(received: date, staff: str = '植田') -> Document:

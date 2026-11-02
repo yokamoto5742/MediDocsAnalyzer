@@ -10,9 +10,9 @@ from tkcalendar import DateEntry
 from app import constants
 from app.charts import overall_figure, staff_figure, trend_figure
 from app.date_entry import make_date_entry
+from service.models import Draft
 from service.service_data_analyzer import OverallSummary, StaffCounts, TrendCounts
-from service.service_excel_reader import Draft
-from service.service_medical_docs_analyzer import DraftStatus, Overview, draft_status
+from service.service_overview import DraftStatus, Overview, draft_status
 
 OVERVIEW_COLUMN_WIDTHS = (90, 80, 240, 100, 90, 80, 90, 150)
 
