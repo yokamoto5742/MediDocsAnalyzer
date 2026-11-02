@@ -78,12 +78,98 @@ class ChartArea:
             self.canvas = None
 
 
+class TrendPanel:
+    """全体推移・個人推移タブの中身。with_staff なら先頭に氏名の選択欄を置く"""
+
+    def __init__(self, tab: ttk.Frame, name: str, on_export: Callable[[], None], on_changed: Callable[[], None],
+                 with_staff: bool) -> None:
+        self.name = name
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(4, weight=1)
+        header = ttk.Frame(tab)
+        header.grid(row=0, column=0, sticky=tk.EW)
+        self.staff_var = tk.StringVar()
+        self.staff_combobox: ttk.Combobox | None = None
+        if with_staff:
+            ttk.Label(header, text=constants.STAFF_NAME_HEADER).pack(side=tk.LEFT, padx=5)
+            self.staff_combobox = self._create_combobox(header, 12, self.staff_var, on_changed)
+        ttk.Label(header, text=constants.TREND_DEPARTMENT_LABEL).pack(side=tk.LEFT, padx=(20 if with_staff else 5, 5))
+        self.department_var = tk.StringVar()
+        self.department_combobox = self._create_combobox(header, 14, self.department_var, on_changed)
+
+        ttk.Label(header, text=constants.TREND_RANGE_LABEL).pack(side=tk.LEFT, padx=(20, 5))
+        self.start_date = self._create_date_entry(header, on_changed)
+        ttk.Label(header, text=constants.TREND_RANGE_SEPARATOR).pack(side=tk.LEFT, padx=5)
+        self.end_date = self._create_date_entry(header, on_changed)
+        ttk.Button(header, text=constants.EXPORT_BUTTON_LABEL, command=on_export).pack(side=tk.RIGHT)
+
+        self.title = ttk.Label(tab, text='')
+        self.title.grid(row=2, column=0, sticky=tk.W, pady=(5, 0))
+        self.tree = ttk.Treeview(tab, show='headings', height=5)
+        self.tree.grid(row=3, column=0, sticky=tk.EW, pady=5)
+        self.chart = ChartArea(tab)
+        self.chart.frame.grid(row=4, column=0, sticky=tk.NSEW)
+
+    @staticmethod
+    def _create_combobox(parent: ttk.Frame, width: int, variable: tk.StringVar,
+                         on_changed: Callable[[], None]) -> ttk.Combobox:
+        combobox = ttk.Combobox(parent, width=width, state='readonly', textvariable=variable)
+        combobox.pack(side=tk.LEFT)
+        combobox.bind('<<ComboboxSelected>>', lambda _event: on_changed())
+        return combobox
+
+    @staticmethod
+    def _create_date_entry(parent: ttk.Frame, on_changed: Callable[[], None]) -> DateEntry:
+        """カレンダーで選んだときと、手入力して Enter を押したときに表示し直す"""
+        date_entry = DateEntry(parent, width=12, background='darkblue', foreground='white', borderwidth=2,
+                               locale='ja_JP', date_pattern='yyyy/mm/dd')
+        date_entry.pack(side=tk.LEFT)
+        date_entry.bind('<<DateEntrySelected>>', lambda _event: on_changed())
+        date_entry.bind('<Return>', lambda _event: on_changed())
+        return date_entry
+
+    @property
+    def has_staff(self) -> bool:
+        return self.staff_combobox is not None
+
+    def set_departments(self, departments: list[str], selected: str) -> None:
+        """診療科の選択肢を入れ、selected が無ければ先頭を選ぶ"""
+        self.department_combobox.configure(values=departments)
+        self.department_var.set(selected if selected in departments else departments[0])
+
+    def selected_department(self) -> str:
+        return self.department_var.get()
+
+    def set_staff_names(self, names: list[str], selected: str) -> None:
+        """氏名の選択肢を入れ、selected が無ければ先頭を選ぶ"""
+        assert self.staff_combobox is not None
+        self.staff_combobox.configure(values=names)
+        self.staff_var.set(selected if selected in names else (names[0] if names else ''))
+
+    def selected_staff(self) -> str | None:
+        """選んだ氏名。氏名の選択欄が無い全体推移なら None"""
+        return self.staff_var.get() if self.has_staff else None
+
+    def show(self, trend: TrendCounts, subject: str) -> None:
+        self.title.configure(text='')
+        # 範囲外と本日より後の月は空欄にする
+        fill_tree(self.tree, [constants.TREND_CORNER_HEADER, *trend.month_labels, constants.TOTAL_ROW_LABEL],
+                  [['' if value is None else value for value in row] for row in trend.table_rows], first_width=80)
+        self.chart.show(trend_figure(trend, subject))
+
+    def show_error(self, message: str) -> None:
+        self.title.configure(text=message)
+        self.tree.delete(*self.tree.get_children())
+        self.chart.clear()
+
+
 class ResultView:
-    """「概要」タブで下書きの一覧を、「全体」「個人」「全体推移」タブで集計結果を表と図にして見せる"""
+    """「概要」タブで下書きの一覧を、「全体」「個人」「全体推移」「個人推移」タブで集計結果を表と図にして見せる"""
 
     def __init__(self, parent: tk.Misc, on_export_overall: Callable[[], None],
                  on_export_staff: Callable[[], None], on_staff_selected: Callable[[], None],
-                 on_export_trend: Callable[[], None], on_trend_changed: Callable[[], None]) -> None:
+                 on_export_trend: Callable[[], None], on_trend_changed: Callable[[], None],
+                 on_export_staff_trend: Callable[[], None], on_staff_trend_changed: Callable[[], None]) -> None:
         # 職員としてログインしたときの本人の氏名。None なら全員分を見られる
         self.restricted_staff: str | None = None
         # 全体の表の担当者の行と合計行。並べ替えても合計行は最後に置く
@@ -98,12 +184,17 @@ class ResultView:
         self.notebook.add(self.overview_tab, text=constants.OVERVIEW_TAB_LABEL)
         self.notebook.add(self.overall_tab, text=constants.OVERALL_TAB_LABEL)
         self.trend_tab = ttk.Frame(self.notebook, padding="5")
+        self.staff_trend_tab = ttk.Frame(self.notebook, padding="5")
         self.notebook.add(self.staff_tab, text=constants.STAFF_SUMMARY_TAB_LABEL)
         self.notebook.add(self.trend_tab, text=constants.TREND_TAB_LABEL)
+        self.notebook.add(self.staff_trend_tab, text=constants.STAFF_TREND_TAB_LABEL)
         self._setup_overview_tab()
         self._setup_overall_tab(on_export_overall)
         self._setup_staff_tab(on_export_staff, on_staff_selected)
-        self._setup_trend_tab(on_export_trend, on_trend_changed)
+        self.trend = TrendPanel(self.trend_tab, constants.TREND_TAB_LABEL, on_export_trend, on_trend_changed,
+                                with_staff=False)
+        self.staff_trend = TrendPanel(self.staff_trend_tab, constants.STAFF_TREND_TAB_LABEL, on_export_staff_trend,
+                                      on_staff_trend_changed, with_staff=True)
 
     def _setup_overview_tab(self) -> None:
         tab = self.overview_tab
@@ -158,42 +249,6 @@ class ResultView:
         self.staff_chart = ChartArea(tab)
         self.staff_chart.frame.grid(row=2, column=0, columnspan=3, sticky=tk.NSEW)
 
-    def _setup_trend_tab(self, on_export: Callable[[], None], on_changed: Callable[[], None]) -> None:
-        tab = self.trend_tab
-        tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(4, weight=1)
-        header = ttk.Frame(tab)
-        header.grid(row=0, column=0, sticky=tk.EW)
-        ttk.Label(header, text=constants.TREND_DEPARTMENT_LABEL).pack(side=tk.LEFT, padx=5)
-        self.trend_department_var = tk.StringVar()
-        self.trend_department_combobox = ttk.Combobox(header, width=14, state='readonly',
-                                                      textvariable=self.trend_department_var)
-        self.trend_department_combobox.pack(side=tk.LEFT)
-        self.trend_department_combobox.bind('<<ComboboxSelected>>', lambda _event: on_changed())
-
-        ttk.Label(header, text=constants.TREND_RANGE_LABEL).pack(side=tk.LEFT, padx=(20, 5))
-        self.trend_start_date = self._create_trend_date_entry(header, on_changed)
-        ttk.Label(header, text=constants.TREND_RANGE_SEPARATOR).pack(side=tk.LEFT, padx=5)
-        self.trend_end_date = self._create_trend_date_entry(header, on_changed)
-        ttk.Button(header, text=constants.EXPORT_BUTTON_LABEL, command=on_export).pack(side=tk.RIGHT)
-
-        self.trend_title = ttk.Label(tab, text='')
-        self.trend_title.grid(row=2, column=0, sticky=tk.W, pady=(5, 0))
-        self.trend_tree = ttk.Treeview(tab, show='headings', height=5)
-        self.trend_tree.grid(row=3, column=0, sticky=tk.EW, pady=5)
-        self.trend_chart = ChartArea(tab)
-        self.trend_chart.frame.grid(row=4, column=0, sticky=tk.NSEW)
-
-    @staticmethod
-    def _create_trend_date_entry(parent: ttk.Frame, on_changed: Callable[[], None]) -> DateEntry:
-        """カレンダーで選んだときと、手入力して Enter を押したときに表示し直す"""
-        date_entry = DateEntry(parent, width=12, background='darkblue', foreground='white', borderwidth=2,
-                               locale='ja_JP', date_pattern='yyyy/mm/dd')
-        date_entry.pack(side=tk.LEFT)
-        date_entry.bind('<<DateEntrySelected>>', lambda _event: on_changed())
-        date_entry.bind('<Return>', lambda _event: on_changed())
-        return date_entry
-
     def show_overview(self, overview: Overview) -> None:
         status_counts = overview.status_counts
         self.overview_title.configure(text=constants.OVERVIEW_TITLE_FORMAT.format(
@@ -234,12 +289,14 @@ class ResultView:
             self.overall_tree.insert('', tk.END, values=row)
 
     def restrict_to_staff(self, staff_name: str) -> None:
-        """全体・全体推移タブを隠し、個人タブを staff_name だけにする。概要タブは割り振りに使うため職員にも見せる"""
+        """全体・全体推移タブを隠し、個人・個人推移タブを staff_name だけにする。概要タブは割り振りに使うため職員にも見せる"""
         self.restricted_staff = staff_name
         self.notebook.hide(self.overall_tab)
         self.notebook.hide(self.trend_tab)
         self.staff_combobox.state(['disabled'])
         self.set_staff_names([staff_name])
+        assert self.staff_trend.staff_combobox is not None
+        self.staff_trend.staff_combobox.state(['disabled'])
 
     def set_staff_names(self, names: list[str]) -> None:
         if self.restricted_staff is not None:
@@ -255,24 +312,3 @@ class ResultView:
         fill_tree(self.document_tree, list(constants.STAFF_DOCUMENT_COLUMNS),
                   [list(row) for row in staff_counts.by_document], first_width=360)
         self.staff_chart.show(staff_figure(staff_counts))
-
-    def set_trend_departments(self, departments: list[str], selected: str) -> None:
-        """診療科の選択肢を入れ、selected が無ければ先頭を選ぶ"""
-        self.trend_department_combobox.configure(values=departments)
-        self.trend_department_var.set(selected if selected in departments else departments[0])
-
-    def selected_trend_department(self) -> str:
-        return self.trend_department_var.get()
-
-    def show_trend(self, trend: TrendCounts, department: str) -> None:
-        rows = trend.table_rows
-        self.trend_title.configure(text='')
-        # 範囲外と本日より後の月は空欄にする
-        fill_tree(self.trend_tree, [constants.TREND_CORNER_HEADER, *trend.month_labels, constants.TOTAL_ROW_LABEL],
-                  [['' if value is None else value for value in row] for row in rows], first_width=80)
-        self.trend_chart.show(trend_figure(trend, department))
-
-    def show_trend_error(self, message: str) -> None:
-        self.trend_title.configure(text=message)
-        self.trend_tree.delete(*self.trend_tree.get_children())
-        self.trend_chart.clear()

@@ -95,7 +95,10 @@ def test_save_trend_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert values[3:6] == [['2024年度', *[1] * 12, 12], ['2025年度', 2, 0, *[2] * 10, 22],
                            ['2026年度', 3, *[None] * 11, 3]]
     assert chart_types(sheet) == ['lineChart']
-    assert [series.marker.symbol for series in getattr(sheet, '_charts')[0].series] == ['circle'] * 3
+    chart = getattr(sheet, '_charts')[0]
+    assert [series.marker.symbol for series in chart.series] == ['circle'] * 3
+    # 凡例とタイトルをグラフ(月のラベル)に重ねない
+    assert (chart.legend.position, chart.legend.overlay, chart.title.overlay) == ('b', False, False)
     # グラフの元は隠しシートで、0 件の月は空欄にして線を引かない
     chart_sheet = load_workbook(output_path)['グラフ用']
     assert chart_sheet.sheet_state == 'hidden'

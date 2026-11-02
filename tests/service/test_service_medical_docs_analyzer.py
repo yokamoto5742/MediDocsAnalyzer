@@ -283,6 +283,26 @@ def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook
     assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数推移_外科_20250401-20260331.xlsx'
 
 
+def test_staff_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook,
+                                        startfile: MagicMock) -> None:
+    tmp_path = config_path.parent
+    make_workbook(tmp_path / 'source.xlsx', [
+        ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
+        ['2025/04/01', 2, '山田', '診断書', '内科', '佐藤', None, '2025/05/02', '植田'],
+    ])
+    analyzer = MedicalDocsAnalyzer()
+    analyzer.apply_import(analyzer.prepare_source_import())
+
+    start_date, end_date = date(2025, 4, 1), date(2026, 3, 31)
+    trend = analyzer.trend_summary('合計', start_date, end_date, 4, date(2026, 11, 1), '花﨑')
+    output_path = analyzer.export_trend('内科', start_date, end_date, 4, date(2026, 11, 1), '花﨑')
+
+    assert trend.by_year == [(2025, [1, *[0] * 11])]
+    assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数推移_花﨑_内科_20250401-20260331.xlsx'
+    assert load_workbook(output_path)['推移']['A1'].value == (
+        '医療文書作成件数推移(医師依頼日) 花﨑 内科 2025/04/01～2026/03/31')
+
+
 def test_run_analysis_raises_when_no_data_in_period(config_path: Path) -> None:
     with pytest.raises(NoDataError):
         MedicalDocsAnalyzer().run_analysis(date(2025, 4, 1), date(2025, 6, 30))

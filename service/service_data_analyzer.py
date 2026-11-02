@@ -118,14 +118,23 @@ def count_staff_documents(connection: sqlite3.Connection, staff_name: str, start
     )
 
 
+def trend_subject(department: str, staff_name: str | None) -> str:
+    """推移の表題に出す対象。担当者を選んでいれば氏名を前に付ける"""
+    return f'{staff_name} {department}' if staff_name else department
+
+
 def count_trend(connection: sqlite3.Connection, department: str | None, start_date: date, end_date: date,
-                year_start_month: int, today: date) -> TrendCounts:
-    """医師依頼日が範囲内の文書を、年(年度)ごとに月別に数える。department が None なら全診療科"""
+                year_start_month: int, today: date, staff_name: str | None = None) -> TrendCounts:
+    """医師依頼日が範囲内の文書を、年(年度)ごとに月別に数える。
+    department が None なら全診療科、staff_name が None なら全担当者"""
     condition = 'requested_date BETWEEN ? AND ?'
     parameters = [start_date.isoformat(), end_date.isoformat()]
     if department is not None:
         condition += ' AND department = ?'
         parameters.append(department)
+    if staff_name is not None:
+        condition += ' AND staff_name = ?'
+        parameters.append(staff_name)
     month_counts = dict(connection.execute(
         f"SELECT strftime('%Y/%m', requested_date), COUNT(*) FROM documents WHERE {condition} GROUP BY 1",
         parameters).fetchall())

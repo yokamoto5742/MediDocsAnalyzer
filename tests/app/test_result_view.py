@@ -21,7 +21,7 @@ TREND = TrendCounts(4, [(2025, [1] * 12), (2026, [2, 3, *[None] * 10])])
 
 
 def make_view(root: tk.Tk) -> ResultView:
-    return ResultView(root, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock())
+    return ResultView(root, *(MagicMock() for _ in range(7)))
 
 
 def tree_values(tree: ttk.Treeview) -> list[tuple[str, ...]]:
@@ -64,7 +64,8 @@ def test_trend_figure_always_shows_twelve_month_labels() -> None:
 def test_tabs_are_overview_overall_staff_trend(root: tk.Tk) -> None:
     view = make_view(root)
 
-    assert [view.notebook.tab(tab, 'text') for tab in view.notebook.tabs()] == ['概要', '全体', '個人', '全体推移']
+    assert [view.notebook.tab(tab, 'text') for tab in view.notebook.tabs()] == [
+        '概要', '全体', '個人', '全体推移', '個人推移']
     assert view.notebook.select() == str(view.overview_tab)
 
 
@@ -140,30 +141,56 @@ def test_set_staff_names_keeps_selection(root: tk.Tk) -> None:
 
 
 def test_set_trend_departments_selects_saved_department(root: tk.Tk) -> None:
+    trend = make_view(root).trend
+
+    trend.set_departments(['合計', '内科', '外科'], '外科')
+    assert trend.selected_department() == '外科'
+
+    trend.set_departments(['合計', '内科'], '外科')
+    assert trend.department_combobox.cget('values') == ('合計', '内科')
+    assert trend.selected_department() == '合計'
+
+
+def test_staff_trend_selects_saved_staff(root: tk.Tk) -> None:
     view = make_view(root)
 
-    view.set_trend_departments(['合計', '内科', '外科'], '外科')
-    assert view.selected_trend_department() == '外科'
+    # 全体推移には氏名の選択欄が無い
+    assert (view.trend.has_staff, view.trend.selected_staff()) == (False, None)
 
-    view.set_trend_departments(['合計', '内科'], '外科')
-    assert view.trend_department_combobox.cget('values') == ('合計', '内科')
-    assert view.selected_trend_department() == '合計'
+    view.staff_trend.set_staff_names(['植田', '花﨑'], '花﨑')
+    assert view.staff_trend.selected_staff() == '花﨑'
+
+    view.staff_trend.set_staff_names(['植田'], '花﨑')
+    assert view.staff_trend.selected_staff() == '植田'
+
+    view.staff_trend.set_staff_names([], '花﨑')
+    assert view.staff_trend.selected_staff() == ''
+
+
+def test_restrict_to_staff_keeps_staff_trend_with_own_name(root: tk.Tk) -> None:
+    view = make_view(root)
+
+    view.restrict_to_staff('花﨑')
+
+    assert view.notebook.tab(view.staff_trend_tab, 'state') == 'normal'
+    assert view.staff_trend.staff_combobox is not None
+    assert view.staff_trend.staff_combobox.instate(['disabled'])
 
 
 def test_show_trend_rows_follow_years(root: tk.Tk) -> None:
-    view = make_view(root)
+    trend = make_view(root).trend
 
-    view.show_trend(TREND, '内科')
+    trend.show(TREND, '内科')
 
-    assert view.trend_title.cget('text') == ''
-    assert (view.trend_tree.heading(0, 'text'), view.trend_tree.heading(1, 'text')) == ('件数', '4月')
-    assert tree_values(view.trend_tree) == [
+    assert trend.title.cget('text') == ''
+    assert (trend.tree.heading(0, 'text'), trend.tree.heading(1, 'text')) == ('件数', '4月')
+    assert tree_values(trend.tree) == [
         ('2025年度', *['1'] * 12, '12'),
         ('2026年度', '2', '3', *[''] * 10, '5'),
     ]
 
-    view.show_trend_error('エラー')
+    trend.show_error('エラー')
 
-    assert view.trend_title.cget('text') == 'エラー'
-    assert view.trend_tree.get_children() == ()
-    assert view.trend_chart.canvas is None
+    assert trend.title.cget('text') == 'エラー'
+    assert trend.tree.get_children() == ()
+    assert trend.chart.canvas is None

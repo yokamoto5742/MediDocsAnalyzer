@@ -11,7 +11,7 @@ from service import service_auth, service_master
 from service.service_auth import LoginResult
 from service.service_backup import backup_database_daily
 from service.service_data_analyzer import (DocumentCounts, StaffCounts, TrendCounts, count_documents,
-                                           count_staff_documents, count_trend)
+                                           count_staff_documents, count_trend, trend_subject)
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
 from service.service_excel_reader import Draft, NoDataError, RowError, SourceData, read_documents
@@ -223,17 +223,19 @@ class MedicalDocsAnalyzer:
                                   start_date, end_date, output_dir)
 
     def trend_summary(self, department: str, start_date: date, end_date: date, year_start_month: int,
-                      today: date) -> TrendCounts:
-        """医師依頼日が範囲内の DB の文書を、年(年度)ごとの月別に数える。department が合計なら全診療科"""
+                      today: date, staff_name: str | None = None) -> TrendCounts:
+        """医師依頼日が範囲内の DB の文書を、年(年度)ごとの月別に数える。
+        department が合計なら全診療科、staff_name が None なら全担当者"""
         with self._open_database() as connection:
             return count_trend(connection, None if department == TOTAL_LABEL else department,
-                               start_date, end_date, year_start_month, today)
+                               start_date, end_date, year_start_month, today, staff_name)
 
     def export_trend(self, department: str, start_date: date, end_date: date, year_start_month: int,
-                     today: date) -> str:
-        """全体推移を Excel に保存し、保存先のパスを返す"""
-        trend = self.trend_summary(department, start_date, end_date, year_start_month, today)
-        return save_trend_results(trend, department, start_date, end_date, load_config()['PATHS']['output_dir'])
+                     today: date, staff_name: str | None = None) -> str:
+        """全体推移(staff_name を渡せば個人推移)を Excel に保存し、保存先のパスを返す"""
+        trend = self.trend_summary(department, start_date, end_date, year_start_month, today, staff_name)
+        return save_trend_results(trend, trend_subject(department, staff_name), start_date, end_date,
+                                  load_config()['PATHS']['output_dir'])
 
     def run_analysis(self, start_date: date, end_date: date) -> str:
         """期間内の文書を集計して Excel に保存し、保存先のパスを返す"""

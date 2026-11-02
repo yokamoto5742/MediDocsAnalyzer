@@ -53,9 +53,9 @@ def staff_figure(staff_counts: StaffCounts) -> Figure:
     return figure
 
 
-def trend_figure(trend: TrendCounts, department: str) -> Figure:
+def trend_figure(trend: TrendCounts, subject: str) -> Figure:
     """年(年度)ごとの月別件数を、1 年 1 本の折れ線グラフにする。範囲外・本日より後・0 件の月は線を引かない。
-    前後が 0 件の月も見えるよう、点の印を付ける"""
+    前後が 0 件の月も見えるよう、点の印を付ける。subject は診療科(個人推移なら「氏名 診療科」)"""
     figure = Figure(figsize=FIGURE_SIZE, layout='constrained')
     axes = figure.add_subplot()
     month_positions = range(len(trend.month_labels))
@@ -65,7 +65,7 @@ def trend_figure(trend: TrendCounts, department: str) -> Figure:
     # 値の無い月も軸から外れないよう、12 か月の目盛りと範囲を固定する
     axes.set_xticks(month_positions, trend.month_labels)
     axes.set_xlim(-0.5, len(trend.month_labels) - 0.5)
-    axes.set_title(f'{department} 月別件数')
+    axes.set_title(f'{subject} 月別件数')
     set_count_axis(axes, [count for _, counts in trend.by_year for count in counts if count is not None])
     # 凡例は年を横に並べてグラフの下に置く
     axes.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncols=max(len(trend.by_year), 1),
