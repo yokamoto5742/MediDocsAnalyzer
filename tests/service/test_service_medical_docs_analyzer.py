@@ -274,9 +274,9 @@ def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook
     analyzer.apply_import(analyzer.prepare_source_import())
 
     start_date, end_date = date(2025, 4, 1), date(2026, 3, 31)
-    total = analyzer.trend_summary('合計', start_date, end_date, 4, date(2026, 11, 1))
+    total = analyzer.trend_summary(None, start_date, end_date, 4, date(2026, 11, 1))
     surgery = analyzer.trend_summary('外科', start_date, end_date, 4, date(2026, 11, 1))
-    output_path = analyzer.export_trend('外科', start_date, end_date, 4, date(2026, 11, 1))
+    output_path = analyzer.export_trend('外科', '外科', start_date, end_date, 4, date(2026, 11, 1))
 
     assert total.by_year == [(2025, [1, 1, *[0] * 10])]
     assert surgery.by_year == [(2025, [0, 1, *[0] * 10])]
@@ -294,8 +294,8 @@ def test_staff_trend_summary_and_export(config_path: Path, make_workbook: MakeWo
     analyzer.apply_import(analyzer.prepare_source_import())
 
     start_date, end_date = date(2025, 4, 1), date(2026, 3, 31)
-    trend = analyzer.trend_summary('合計', start_date, end_date, 4, date(2026, 11, 1), '花﨑')
-    output_path = analyzer.export_trend('内科', start_date, end_date, 4, date(2026, 11, 1), '花﨑')
+    trend = analyzer.trend_summary(None, start_date, end_date, 4, date(2026, 11, 1), '花﨑')
+    output_path = analyzer.export_trend('花﨑 内科', '内科', start_date, end_date, 4, date(2026, 11, 1), '花﨑')
 
     assert trend.by_year == [(2025, [1, *[0] * 11])]
     assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数推移_花﨑_内科_20250401-20260331.xlsx'

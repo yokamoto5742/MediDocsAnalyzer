@@ -327,11 +327,16 @@ class MedicalDocsAnalyzerGUI:
             return
         try:
             self._save_trend_settings(section, department, staff_name, *trend_range)
-            trend = self.analyzer.trend_summary(department, *trend_range, self.year_start_month_var.get(),
-                                                date.today(), staff_name)
+            trend = self.analyzer.trend_summary(self._department_filter(department), *trend_range,
+                                                self.year_start_month_var.get(), date.today(), staff_name)
             panel.show(trend, trend_subject(department, staff_name))
         except Exception as e:
             panel.show_error(constants.TREND_ERROR_FORMAT.format(name=panel.name, error=e))
+
+    @staticmethod
+    def _department_filter(department: str) -> str | None:
+        """診療科の選択欄の「合計」は、全診療科(None)にしてサービスへ渡す"""
+        return None if department == constants.TOTAL_ROW_LABEL else department
 
     def export_trend(self) -> None:
         self._export_trend_panel(self.result_view.trend)
@@ -347,8 +352,8 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.INVALID_TREND_RANGE_MESSAGE)
             return
         try:
-            self.analyzer.export_trend(department, *trend_range, self.year_start_month_var.get(), date.today(),
-                                       staff_name)
+            self.analyzer.export_trend(trend_subject(department, staff_name), self._department_filter(department),
+                                       *trend_range, self.year_start_month_var.get(), date.today(), staff_name)
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
