@@ -1,6 +1,6 @@
 import sqlite3
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from service.models import NoDataError
@@ -8,6 +8,16 @@ from service.service_database import PERIOD_CONDITION, period_parameters
 from utils.date_period import fiscal_year, get_period_range
 
 TOTAL_LABEL = '合計'
+# 文書名にこの語を含む文書を、診療科を問わず「主治医意見書」として数える
+OPINION_LABEL = '主治医意見書'
+OPINION_CONDITION = f"document_name LIKE '%{OPINION_LABEL}%'"
+
+
+@dataclass(frozen=True)
+class DocumentFilter:
+    """推移で数える文書の絞り込み。既定は全文書"""
+    department: str | None = None
+    opinion_only: bool = False
 
 
 @dataclass
@@ -17,6 +27,8 @@ class DocumentCounts:
     total: int
     first_date: date
     last_date: date
+    # 担当者ごとの主治医意見書の件数。診療科の件数にも含まれている
+    opinion_by_staff: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -38,6 +50,12 @@ class OverallSummary:
         rows.append([TOTAL_LABEL, counts.total,
                      *(counts.by_department.get(department, 0) for department in self.departments)])
         return rows
+
+    @property
+    def opinion_counts(self) -> list[int]:
+        """rows の各行に並べる主治医意見書の件数。最後は合計行で、一覧にない担当者の件数も含む"""
+        opinion_by_staff = self.counts.opinion_by_staff
+        return [*(opinion_by_staff.get(staff, 0) for staff in self.staff_members), sum(opinion_by_staff.values())]
 
 
 @dataclass
@@ -90,6 +108,9 @@ def count_documents(connection: sqlite3.Connection, start_date: date, end_date: 
     first_date, last_date = connection.execute(
         f'SELECT MIN(received_date), MAX(received_date) FROM documents WHERE {PERIOD_CONDITION}',
         parameters).fetchone()
+    opinion_by_staff = dict(connection.execute(
+        f'SELECT staff_name, COUNT(*) FROM documents WHERE {PERIOD_CONDITION} AND {OPINION_CONDITION}'
+        ' GROUP BY staff_name', parameters).fetchall())
 
     return DocumentCounts(
         by_staff_department=by_staff_department,
@@ -97,6 +118,7 @@ def count_documents(connection: sqlite3.Connection, start_date: date, end_date: 
         total=sum(by_staff_department.values()),
         first_date=date.fromisoformat(first_date),
         last_date=date.fromisoformat(last_date),
+        opinion_by_staff=opinion_by_staff,
     )
 
 
@@ -126,11 +148,14 @@ def count_staff_documents(connection: sqlite3.Connection, staff_name: str, start
     month_counts = dict(connection.execute(
         f"SELECT strftime('%Y/%m', received_date), COUNT(*) FROM documents WHERE {condition}"
         ' GROUP BY 1', parameters).fetchall())
+    opinion_count = connection.execute(
+        f'SELECT COUNT(*) FROM documents WHERE {condition} AND {OPINION_CONDITION}', parameters).fetchone()[0]
 
+    # 主治医意見書は診療科の件数にも含まれるため、合計に足さないよう後から並べる
     return StaffCounts(
         staff_name=staff_name,
         total=sum(count for _, count in by_department),
-        by_department=by_department,
+        by_department=by_department + ([(OPINION_LABEL, opinion_count)] if opinion_count else []),
         by_document=by_document,
         by_month=[(month, month_counts.get(month, 0)) for month in months_between(start_date, end_date)],
     )
@@ -141,15 +166,17 @@ def trend_subject(department: str, staff_name: str | None) -> str:
     return f'{staff_name} {department}' if staff_name else department
 
 
-def count_trend(connection: sqlite3.Connection, department: str | None, start_date: date, end_date: date,
+def count_trend(connection: sqlite3.Connection, document_filter: DocumentFilter, start_date: date, end_date: date,
                 year_start_month: int, today: date, staff_name: str | None = None) -> TrendCounts:
-    """医師依頼日が範囲内の文書を、年(年度)ごとに月別に数える。
-    department が None なら全診療科、staff_name が None なら全担当者"""
+    """医師依頼日が範囲内で document_filter に合う文書を、年(年度)ごとに月別に数える。
+    staff_name が None なら全担当者"""
     condition = 'requested_date BETWEEN ? AND ?'
     parameters = [start_date.isoformat(), end_date.isoformat()]
-    if department is not None:
+    if document_filter.department is not None:
         condition += ' AND department = ?'
-        parameters.append(department)
+        parameters.append(document_filter.department)
+    if document_filter.opinion_only:
+        condition += f' AND {OPINION_CONDITION}'
     if staff_name is not None:
         condition += ' AND staff_name = ?'
         parameters.append(staff_name)

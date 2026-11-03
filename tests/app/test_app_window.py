@@ -11,7 +11,7 @@ from app import constants
 from app.app_window import MedicalDocsAnalyzerGUI
 from app.result_view import TrendPanel
 from service.models import Document, Draft, NoDataError, RowError, SourceData
-from service.service_data_analyzer import DocumentCounts, OverallSummary, StaffCounts, TrendCounts
+from service.service_data_analyzer import DocumentCounts, DocumentFilter, OverallSummary, StaffCounts, TrendCounts
 from service.service_master import ADMIN_ROLE, Department, Staff
 from service.service_medical_docs_analyzer import ImportPlan
 from service.service_overview import Overview
@@ -185,6 +185,22 @@ def test_load_excel_shows_error_rows(gui: MedicalDocsAnalyzerGUI, analyzer: Magi
         gui.load_excel()
 
     dialog.assert_called_once_with(gui.root, errors)
+
+
+def test_start_analysis_without_error_rows_dialog(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                                  messagebox: MagicMock) -> None:
+    analyzer.prepare_source_import.return_value = make_plan([RowError('source.xlsm', 5, '123', '預り日が空です', '')])
+    analyzer.overview.return_value = make_overview([])
+    analyzer.overall_summary.return_value = make_summary()
+    analyzer.staff_summary.return_value = make_staff_counts('植田')
+
+    with patch('app.app_window.ImportErrorsDialog') as dialog:
+        gui.start_analysis(show_errors=False)
+
+    # 起動時はエラー行の一覧を出さずに集計まで進める
+    dialog.assert_not_called()
+    analyzer.overall_summary.assert_called_once()
+    messagebox.showerror.assert_not_called()
 
 
 def test_load_excel_cancelled(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:
@@ -391,7 +407,7 @@ def test_analyze_saved_period_runs_analysis(gui: MedicalDocsAnalyzerGUI) -> None
     with patch.object(gui, 'start_analysis') as start_analysis:
         ANALYZE_SAVED_PERIOD(gui)
 
-    start_analysis.assert_called_once_with()
+    start_analysis.assert_called_once_with(show_errors=False)
 
 
 def test_analyze_saved_period_skips_without_saved_dates(gui: MedicalDocsAnalyzerGUI) -> None:
@@ -416,8 +432,8 @@ def test_init_shows_trend_from_last_year_to_today(gui: MedicalDocsAnalyzerGUI, a
     trend = gui.result_view.trend
 
     assert (trend.start_date.get_date(), trend.end_date.get_date()) == (last_year_start, today)
-    assert trend.department_combobox.cget('values') == ('合計', '内科', '外科')
-    analyzer.trend_summary.assert_any_call(None, last_year_start, today, 4, today, None)
+    assert trend.department_combobox.cget('values') == ('合計', '主治医意見書', '内科', '外科')
+    analyzer.trend_summary.assert_any_call(DocumentFilter(), last_year_start, today, 4, today, None)
     assert len(trend.tree.get_children()) == 1
     assert load_config()['Trend']['department'] == '合計'
 
@@ -430,7 +446,7 @@ def test_init_shows_staff_trend_for_first_staff(gui: MedicalDocsAnalyzerGUI, ana
     # 退職者も選べる
     assert staff_trend.staff_combobox is not None
     assert staff_trend.staff_combobox.cget('values') == ('植田', '花﨑')
-    analyzer.trend_summary.assert_any_call(None, last_year_start, today, 4, today, '植田')
+    analyzer.trend_summary.assert_any_call(DocumentFilter(), last_year_start, today, 4, today, '植田')
     assert len(staff_trend.tree.get_children()) == 1
     assert dict(load_config()['StaffTrend']) == {
         'start_date': last_year_start.isoformat(), 'end_date': today.isoformat(), 'department': '合計',
@@ -452,14 +468,14 @@ def test_refresh_staff_trend_restores_and_saves_selection(config_path: Path, roo
 
     staff_trend = gui.result_view.staff_trend
     assert (staff_trend.selected_staff(), staff_trend.selected_department()) == ('花﨑', '外科')
-    analyzer.trend_summary.assert_any_call('外科', date(2024, 1, 1), date(2026, 10, 1), 4, date.today(), '花﨑')
+    analyzer.trend_summary.assert_any_call(DocumentFilter('外科'), date(2024, 1, 1), date(2026, 10, 1), 4, date.today(), '花﨑')
 
     staff_trend.staff_var.set('植田')
     gui.refresh_staff_trend()
     gui.export_staff_trend()
 
-    analyzer.trend_summary.assert_called_with('外科', date(2024, 1, 1), date(2026, 10, 1), 4, date.today(), '植田')
-    analyzer.export_trend.assert_called_once_with('植田 外科', '外科', date(2024, 1, 1), date(2026, 10, 1), 4,
+    analyzer.trend_summary.assert_called_with(DocumentFilter('外科'), date(2024, 1, 1), date(2026, 10, 1), 4, date.today(), '植田')
+    analyzer.export_trend.assert_called_once_with('植田 外科', DocumentFilter('外科'), date(2024, 1, 1), date(2026, 10, 1), 4,
                                                   date.today(), '植田')
     assert load_config()['StaffTrend']['staff_name'] == '植田'
     open_folder_of.assert_called_once_with(analyzer.export_trend.return_value)
@@ -478,7 +494,7 @@ def test_init_restores_saved_trend_settings(config_path: Path, root: tk.Tk) -> N
 
     assert gui.result_view.trend.selected_department() == '外科'
     analyzer_class.return_value.trend_summary.assert_called_once_with(
-        '外科', date(2024, 1, 1), date(2026, 10, 1), 4, date.today(), None)
+        DocumentFilter('外科'), date(2024, 1, 1), date(2026, 10, 1), 4, date.today(), None)
 
 
 def test_refresh_trend_saves_range_and_department(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
@@ -490,7 +506,7 @@ def test_refresh_trend_saves_range_and_department(gui: MedicalDocsAnalyzerGUI, a
 
     gui.refresh_trend()
 
-    analyzer.trend_summary.assert_called_with('内科', date(2021, 1, 1), date(2023, 6, 30), 4, date.today(), None)
+    analyzer.trend_summary.assert_called_with(DocumentFilter('内科'), date(2021, 1, 1), date(2023, 6, 30), 4, date.today(), None)
     # 旧版の開始年・終了年は残さない
     assert dict(load_config()['Trend']) == {'start_date': '2021-01-01', 'end_date': '2023-06-30',
                                             'department': '内科'}
@@ -527,7 +543,7 @@ def test_export_trend_uses_selected_department(gui: MedicalDocsAnalyzerGUI, anal
 
     gui.export_trend()
 
-    analyzer.export_trend.assert_called_once_with('外科', '外科', date(2024, 1, 1), date(2025, 12, 31), 4,
+    analyzer.export_trend.assert_called_once_with('外科', DocumentFilter('外科'), date(2024, 1, 1), date(2025, 12, 31), 4,
                                                   date.today(), None)
 
 
@@ -537,7 +553,17 @@ def test_export_trend_passes_total_as_all_departments(gui: MedicalDocsAnalyzerGU
 
     gui.export_trend()
 
-    analyzer.export_trend.assert_called_once_with(constants.TOTAL_ROW_LABEL, None, date(2024, 1, 1),
+    analyzer.export_trend.assert_called_once_with(constants.TOTAL_ROW_LABEL, DocumentFilter(), date(2024, 1, 1),
+                                                  date(2025, 12, 31), 4, date.today(), None)
+
+
+def test_export_trend_passes_opinion_as_all_departments(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
+    set_trend_range(gui, '2024/01/01', '2025/12/31')
+    gui.result_view.trend.department_var.set('主治医意見書')
+
+    gui.export_trend()
+
+    analyzer.export_trend.assert_called_once_with('主治医意見書', DocumentFilter(opinion_only=True), date(2024, 1, 1),
                                                   date(2025, 12, 31), 4, date.today(), None)
 
 

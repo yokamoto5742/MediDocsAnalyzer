@@ -14,7 +14,7 @@ window_width = 300
 window_height = 450
 
 [PATHS]
-source_file_path = {tmp_path / 'source.xlsx'}
+source_dir = {tmp_path}
 database_path = {tmp_path / 'database.db'}
 legacy_database_path = {tmp_path / 'legacy.xlsx'}
 backup_dir = {tmp_path / 'backup'}

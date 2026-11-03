@@ -6,11 +6,15 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 from service.models import NoDataError
+from service.service_data_analyzer import DocumentFilter
 from service.service_database import open_database
 from service.service_master import Department
 from service.service_medical_docs_analyzer import TOP_DOCUMENT_COUNT, MedicalDocsAnalyzer, split_list
 from tests.service.conftest import MakeWorkbook
 from utils.config_manager import load_config, save_config
+
+# 元データのフォルダ(一時フォルダ)で最新として選ばれるファイル名
+SOURCE_FILE_NAME = '医療文書担当一覧_202504010800.xlsm'
 
 
 def database_rows(config_path: Path) -> list[tuple[str, str]]:
@@ -19,12 +23,26 @@ def database_rows(config_path: Path) -> list[tuple[str, str]]:
             'SELECT received_date, staff_name FROM documents ORDER BY received_date, staff_name').fetchall()
 
 
+def test_source_import_reads_latest_file_in_source_dir(config_path: Path, make_workbook: MakeWorkbook) -> None:
+    tmp_path = config_path.parent
+    make_workbook(tmp_path / '医療文書担当一覧_202504010700.xlsm', [
+        [datetime(2025, 4, 1), '1', '', '古い', '内科', '佐藤', '', datetime(2025, 4, 2), '植田'],
+    ])
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
+        [datetime(2025, 4, 1), '1', '', '新しい', '内科', '佐藤', '', datetime(2025, 4, 2), '植田'],
+    ])
+
+    plan = MedicalDocsAnalyzer().prepare_source_import()
+
+    assert [document.document_name for document in plan.source.documents] == ['新しい']
+
+
 def test_split_list() -> None:
     assert split_list(' 植田, 花﨑 ,,') == ['植田', '花﨑']
 
 
 def test_load_overview_reads_source_with_configured_days(config_path: Path, make_workbook: MakeWorkbook) -> None:
-    make_workbook(config_path.parent / 'source.xlsx', [
+    make_workbook(config_path.parent / SOURCE_FILE_NAME, [
         ['2026/10/27', 1, '山田', '診断書', '内科', '佐藤', None, None, '未登録'],
         ['2026/10/30', 2, '鈴木', '診断書', '内科', '佐藤', None, '2026/10/31', None],
         ['2026/10/30', 3, '田中', '診断書', '内科', '佐藤', None, '2026/10/31', '植田'],
@@ -40,7 +58,7 @@ def test_load_overview_reads_source_with_configured_days(config_path: Path, make
 
 
 def test_load_overview_uses_seven_days_by_default(config_path: Path, make_workbook: MakeWorkbook) -> None:
-    make_workbook(config_path.parent / 'source.xlsx', [
+    make_workbook(config_path.parent / SOURCE_FILE_NAME, [
         ['2026/10/25', 1, '山田', '診断書', '内科', '佐藤', None, None, '植田'],
     ])
 
@@ -55,7 +73,7 @@ def test_source_import_replaces_range_of_legacy_documents(config_path: Path, mak
         ['2025/03/31', 1, '既存', '証明書', '内科', '佐藤', None, '2025/04/01', '沖野'],
         ['2025/04/03', 2, '取消', '診断書', '内科', '佐藤', None, '2025/04/04', '沖野'],
     ])
-    make_workbook(tmp_path / 'source.xlsx', [
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
         [datetime(2025, 4, 1), 3, '山田', '診断書', '内科', '佐藤', None, None, '植田'],
         [datetime(2025, 4, 3), 4, '鈴木', '紹介状', '外科', '田中', None, datetime(2025, 4, 4), '花﨑'],
         [datetime(2025, 4, 5), 5, '田中', '紹介状', '外科', '田中', None, '025/4/6', '花﨑'],
@@ -82,7 +100,7 @@ def test_import_keeps_documents_newer_than_source(config_path: Path, make_workbo
         ['2025/04/01', 1, '既存', '証明書', '内科', '佐藤', None, '2025/04/02', '沖野'],
         ['2025/06/30', 2, '新しい', '証明書', '内科', '佐藤', None, '2025/07/01', '沖野'],
     ])
-    make_workbook(tmp_path / 'source.xlsx', [
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/04/01', 1, '既存', '証明書', '内科', '佐藤', None, '2025/04/02', '植田'],
         ['2025/04/02', 3, '下書き', '証明書', '内科', '佐藤', None, None, None],
     ])
@@ -99,7 +117,7 @@ def test_import_keeps_documents_newer_than_source(config_path: Path, make_workbo
 def test_source_import_does_not_read_legacy_database_into_empty_database(config_path: Path,
                                                                         make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
-    make_workbook(tmp_path / 'source.xlsx', [
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/04/03', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/04', '植田'],
     ])
     make_workbook(tmp_path / 'legacy.xlsx', [
@@ -112,7 +130,7 @@ def test_source_import_does_not_read_legacy_database_into_empty_database(config_
 
 
 def test_prepare_import_rejects_staff_not_in_master(config_path: Path, make_workbook: MakeWorkbook) -> None:
-    make_workbook(config_path.parent / 'source.xlsx', [
+    make_workbook(config_path.parent / SOURCE_FILE_NAME, [
         ['2025/04/03', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/04', '未登録'],
     ])
 
@@ -123,7 +141,7 @@ def test_prepare_import_rejects_staff_not_in_master(config_path: Path, make_work
 
 
 def test_prepare_import_raises_when_source_is_empty(config_path: Path, make_workbook: MakeWorkbook) -> None:
-    make_workbook(config_path.parent / 'source.xlsx', [])
+    make_workbook(config_path.parent / SOURCE_FILE_NAME, [])
 
     with pytest.raises(NoDataError):
         MedicalDocsAnalyzer().prepare_source_import()
@@ -142,7 +160,7 @@ def test_backup_database(config_path: Path) -> None:
 def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     Workbook().save(tmp_path / 'template.xlsx')
-    make_workbook(tmp_path / 'source.xlsx', [
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/03/31', 1, '対象外', '診断書', '内科', '佐藤', None, '2025/04/01', '植田'],
         ['2025/04/01', 2, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '植田'],
         ['2025/05/10', 3, '鈴木', '紹介状', '外科', '田中', None, '2025/05/11', '花﨑'],
@@ -167,7 +185,7 @@ def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook) -> None:
 def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
     Workbook().save(tmp_path / 'template.xlsx')
-    make_workbook(tmp_path / 'source.xlsx', [
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/04/01', 1, '山田', '診断書', '眼科', '佐藤', None, '2025/04/02', '植田'],
     ])
     analyzer = MedicalDocsAnalyzer()
@@ -193,7 +211,7 @@ def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkboo
 
 def test_export_staff(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
-    make_workbook(tmp_path / 'source.xlsx', [
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
     ])
     analyzer = MedicalDocsAnalyzer()
@@ -218,7 +236,7 @@ def test_export_staff_limits_documents_to_top(config_path: Path, monkeypatch: py
 
 def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
-    make_workbook(tmp_path / 'source.xlsx', [
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
         ['2025/04/01', 2, '山田', '診断書', '外科', '佐藤', None, '2025/05/02', '花﨑'],
     ])
@@ -226,9 +244,9 @@ def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook
     analyzer.apply_import(analyzer.prepare_source_import())
 
     start_date, end_date = date(2025, 4, 1), date(2026, 3, 31)
-    total = analyzer.trend_summary(None, start_date, end_date, 4, date(2026, 11, 1))
-    surgery = analyzer.trend_summary('外科', start_date, end_date, 4, date(2026, 11, 1))
-    output_path = analyzer.export_trend('外科', '外科', start_date, end_date, 4, date(2026, 11, 1))
+    total = analyzer.trend_summary(DocumentFilter(), start_date, end_date, 4, date(2026, 11, 1))
+    surgery = analyzer.trend_summary(DocumentFilter('外科'), start_date, end_date, 4, date(2026, 11, 1))
+    output_path = analyzer.export_trend('外科', DocumentFilter('外科'), start_date, end_date, 4, date(2026, 11, 1))
 
     assert total.by_year == [(2025, [1, 1, *[0] * 10])]
     assert surgery.by_year == [(2025, [0, 1, *[0] * 10])]
@@ -237,7 +255,7 @@ def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook
 
 def test_staff_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
-    make_workbook(tmp_path / 'source.xlsx', [
+    make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/04/01', 1, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '花﨑'],
         ['2025/04/01', 2, '山田', '診断書', '内科', '佐藤', None, '2025/05/02', '植田'],
     ])
@@ -245,8 +263,8 @@ def test_staff_trend_summary_and_export(config_path: Path, make_workbook: MakeWo
     analyzer.apply_import(analyzer.prepare_source_import())
 
     start_date, end_date = date(2025, 4, 1), date(2026, 3, 31)
-    trend = analyzer.trend_summary(None, start_date, end_date, 4, date(2026, 11, 1), '花﨑')
-    output_path = analyzer.export_trend('花﨑 内科', '内科', start_date, end_date, 4, date(2026, 11, 1), '花﨑')
+    trend = analyzer.trend_summary(DocumentFilter(), start_date, end_date, 4, date(2026, 11, 1), '花﨑')
+    output_path = analyzer.export_trend('花﨑 内科', DocumentFilter('内科'), start_date, end_date, 4, date(2026, 11, 1), '花﨑')
 
     assert trend.by_year == [(2025, [1, *[0] * 11])]
     assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数推移_花﨑_内科_20250401-20260331.xlsx'
@@ -260,7 +278,7 @@ def test_run_analysis_raises_when_no_data_in_period(config_path: Path) -> None:
 
 
 def test_empty_workbook_without_headers_is_rejected(config_path: Path) -> None:
-    Workbook().save(config_path.parent / 'source.xlsx')
+    Workbook().save(config_path.parent / SOURCE_FILE_NAME)
 
     with pytest.raises(ValueError):
         MedicalDocsAnalyzer().prepare_source_import()

@@ -3,6 +3,7 @@ from collections.abc import Callable
 from tkinter import filedialog, messagebox, ttk
 
 from app import constants
+from service.service_medical_docs_analyzer import DEFAULT_SOURCE_DIR
 from service.service_overview import DEFAULT_PENDING_DAYS
 from utils.config_manager import load_config, update_config
 
@@ -17,6 +18,7 @@ NUMBER_SETTINGS: list[tuple[str, str, str, int, int]] = [
 ]
 # 古い設定ファイルに無い項目の初期値
 NUMBER_DEFAULTS = {'pending_days': str(DEFAULT_PENDING_DAYS)}
+PATH_DEFAULTS = {'source_dir': DEFAULT_SOURCE_DIR}
 
 
 class SettingsDialog:
@@ -32,14 +34,15 @@ class SettingsDialog:
 
         config = load_config()
         path_rows: list[tuple[str, str, Callable[[str], None]]] = [
-            ('source_file_path', constants.SOURCE_FILE_LABEL, self._choose_file),
+            ('source_dir', constants.SOURCE_DIR_LABEL, self._choose_directory),
             ('database_path', constants.DATABASE_FILE_LABEL, self._choose_database),
             ('legacy_database_path', constants.LEGACY_DATABASE_FILE_LABEL, self._choose_file),
             ('backup_dir', constants.BACKUP_DIR_LABEL, self._choose_directory),
             ('template_path', constants.TEMPLATE_FILE_LABEL, self._choose_file),
             ('output_dir', constants.OUTPUT_DIR_LABEL, self._choose_directory),
         ]
-        self.path_vars = {key: tk.StringVar(value=config['PATHS'].get(key, '')) for key, _, _ in path_rows}
+        self.path_vars = {key: tk.StringVar(value=config['PATHS'].get(key, PATH_DEFAULTS.get(key, '')))
+                          for key, _, _ in path_rows}
         self.number_vars = {key: tk.StringVar(value=config.get(section, key, fallback=NUMBER_DEFAULTS.get(key, '')))
                             for section, key, _, _, _ in NUMBER_SETTINGS}
 

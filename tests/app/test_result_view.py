@@ -14,7 +14,7 @@ from service.service_overview import Overview
 
 SUMMARY = OverallSummary(
     DocumentCounts({('植田', '内科'): 2, ('植田', '小児科'): 1, ('花﨑', '外科'): 1},
-                   {'内科': 2, '小児科': 1, '外科': 1}, 4, date(2025, 4, 1), date(2025, 4, 30)),
+                   {'内科': 2, '小児科': 1, '外科': 1}, 4, date(2025, 4, 1), date(2025, 4, 30), {'植田': 1}),
     ['植田', '花﨑'], ['内科', '外科'])
 STAFF_COUNTS = StaffCounts('植田', 3, [('内科', 2), ('小児科', 1)], [('診断書', 3)], [('2025/04', 3)])
 TREND = TrendCounts(4, [(2025, [1] * 12), (2026, [2, 3, *[None] * 10])])
@@ -107,8 +107,9 @@ def test_show_overall_and_staff(root: tk.Tk) -> None:
     view.set_staff_names(SUMMARY.staff_members)
     view.show_staff(STAFF_COUNTS)
 
-    assert view.overall_tree.cget('columns') == ('氏名', '合計', '内科', '外科')
-    assert tree_values(view.overall_tree)[-1] == ('合計', '4', '2', '1')
+    assert view.overall_tree.cget('columns') == ('氏名', '合計', '内科', '外科', '主治医意見書')
+    assert tree_values(view.overall_tree) == [('植田', '2', '2', '0', '1'), ('花﨑', '1', '0', '1', '0'),
+                                              ('合計', '4', '2', '1', '1')]
     assert view.staff_var.get() == '植田'
     assert tree_values(view.department_tree) == [('内科', '2'), ('小児科', '1')]
     assert tree_values(view.document_tree) == [('診断書', '3')]

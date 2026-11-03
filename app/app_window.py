@@ -15,13 +15,14 @@ from app.master_dialog import MasterDialog
 from app.result_view import ResultView, TrendPanel
 from app.settings_dialog import SettingsDialog
 from service.models import Draft, NoDataError
-from service.service_data_analyzer import trend_subject
+from service.service_data_analyzer import OPINION_LABEL, DocumentFilter, trend_subject
 from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
 from utils.config_manager import load_config, update_config
 from utils.date_period import PERIOD_NAMES, fiscal_year, get_period_range
 
-DEFAULT_YEAR_START_MONTH = 4
+# 同梱の config.ini と同じ値にする
+DEFAULT_YEAR_START_MONTH = 1
 TREND_SECTION = 'Trend'
 STAFF_TREND_SECTION = 'StaffTrend'
 
@@ -29,15 +30,19 @@ STAFF_TREND_SECTION = 'StaffTrend'
 @dataclass
 class TrendRequest:
     """推移タブで選んだ内容"""
-    department: str  # 選択欄の表示。「合計」なら全診療科
+    department: str  # 選択欄の表示。「合計」なら全文書、「主治医意見書」なら全診療科の主治医意見書
     staff_name: str | None  # None なら全担当者(全体推移)
     start_date: date
     end_date: date
 
     @property
-    def department_filter(self) -> str | None:
-        """サービスへ渡す診療科。全診療科なら None"""
-        return None if self.department == constants.TOTAL_ROW_LABEL else self.department
+    def document_filter(self) -> DocumentFilter:
+        """選択欄の表示を、サービスへ渡す絞り込みにする"""
+        if self.department == constants.TOTAL_ROW_LABEL:
+            return DocumentFilter()
+        if self.department == OPINION_LABEL:
+            return DocumentFilter(opinion_only=True)
+        return DocumentFilter(department=self.department)
 
     @property
     def subject(self) -> str:
@@ -206,9 +211,11 @@ class MedicalDocsAnalyzerGUI:
             start_date=plan.start_date, end_date=plan.end_date, deleted=plan.deleted_count,
             inserted=len(plan.source.documents), errors=len(plan.source.errors))
 
-    def _import(self, prepare: Callable[[], ImportPlan], confirm: bool) -> ImportPlan | None:
+    def _import(self, prepare: Callable[[], ImportPlan], confirm: bool,
+                show_errors: bool = True) -> ImportPlan | None:
         """prepare で作った計画どおりに取り込み、計画を返す。やめたか失敗したら None。
-        confirm なら取り込む前に件数を確かめ、取り込んだ後に DB の件数を知らせる"""
+        confirm なら取り込む前に件数を確かめ、取り込んだ後に DB の件数を知らせる。
+        show_errors なら取り込めなかった行の一覧を出す"""
         try:
             plan = prepare()
             if confirm and not messagebox.askyesno(constants.CONFIRM_TITLE, self._import_confirm_message(plan)):
@@ -222,11 +229,11 @@ class MedicalDocsAnalyzerGUI:
             return None
         if confirm:
             messagebox.showinfo(constants.COMPLETE_TITLE, constants.LOAD_COMPLETE_MESSAGE.format(count=count))
-        if plan.source.errors:
+        if show_errors and plan.source.errors:
             ImportErrorsDialog(self.root, plan.source.errors)
         return plan
 
-    def start_analysis(self) -> None:
+    def start_analysis(self, show_errors: bool = True) -> None:
         try:
             start_date, end_date = read_date_range(self.start_date, self.end_date)
         except ValueError as e:
@@ -234,7 +241,7 @@ class MedicalDocsAnalyzerGUI:
             return
 
         # 元データ(xlsm)は確認なしで取り込む
-        plan = self._import(self.analyzer.prepare_source_import, confirm=False)
+        plan = self._import(self.analyzer.prepare_source_import, confirm=False, show_errors=show_errors)
         if plan is None:
             return
         self.refresh_overview(plan.source.drafts)
@@ -257,9 +264,10 @@ class MedicalDocsAnalyzerGUI:
         self.show_staff_summary()
 
     def analyze_saved_period(self) -> None:
-        """前回集計した期間が設定に残っていれば、起動時に「集計開始」と同じく取り込んでから集計する"""
+        """前回集計した期間が設定に残っていれば、起動時に「集計開始」と同じく取り込んでから集計する。
+        起動のたびに出ると煩わしいため、取り込めなかった行の一覧は出さない"""
         if self.config.has_option('Analysis', 'start_date') and self.config.has_option('Analysis', 'end_date'):
-            self.start_analysis()
+            self.start_analysis(show_errors=False)
 
     def show_staff_summary(self) -> None:
         staff_name = self.result_view.staff_var.get()
@@ -312,7 +320,7 @@ class MedicalDocsAnalyzerGUI:
         except Exception as e:
             panel.show_error(constants.TREND_ERROR_FORMAT.format(name=panel.name, error=e))
             return
-        panel.set_departments([constants.TOTAL_ROW_LABEL, *departments],
+        panel.set_departments([constants.TOTAL_ROW_LABEL, OPINION_LABEL, *departments],
                               self.config.get(section, 'department', fallback=constants.TOTAL_ROW_LABEL))
         self._refresh_trend_panel(panel, section)
 
@@ -349,7 +357,7 @@ class MedicalDocsAnalyzerGUI:
             return
         try:
             self._save_trend_settings(section, request)
-            trend = self.analyzer.trend_summary(request.department_filter, request.start_date, request.end_date,
+            trend = self.analyzer.trend_summary(request.document_filter, request.start_date, request.end_date,
                                                 self.year_start_month_var.get(), date.today(), request.staff_name)
             panel.show(trend, request.subject)
         except Exception as e:
@@ -371,7 +379,7 @@ class MedicalDocsAnalyzerGUI:
             return
         try:
             open_folder_of(self.analyzer.export_trend(
-                request.subject, request.department_filter, request.start_date, request.end_date,
+                request.subject, request.document_filter, request.start_date, request.end_date,
                 self.year_start_month_var.get(), date.today(), request.staff_name))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))

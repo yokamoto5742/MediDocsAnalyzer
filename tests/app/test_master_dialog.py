@@ -107,6 +107,18 @@ def test_save_and_delete_department(dialog: MasterDialog, analyzer: MedicalDocsA
     assert analyzer.list_departments() == [Department('外科', 2), Department('眼科', 3)]
 
 
+@pytest.mark.parametrize('name', ['合計', '主治医意見書'])
+def test_save_department_rejects_reserved_name(dialog: MasterDialog, analyzer: MedicalDocsAnalyzer,
+                                               messagebox: MagicMock, name: str) -> None:
+    dialog.department_name_var.set(name)
+
+    dialog.save_department()
+
+    messagebox.showerror.assert_called_once_with(
+        constants.ERROR_TITLE, constants.RESERVED_DEPARTMENT_MESSAGE.format(name=name), parent=dialog.dialog)
+    assert [department.name for department in analyzer.list_departments()] == ['内科', '外科']
+
+
 def test_issue_temporary_password_shows_database_error(dialog: MasterDialog, messagebox: MagicMock) -> None:
     dialog.staff_list[0].emr_id = 'A01'
     dialog.staff_tree.selection_set('0')

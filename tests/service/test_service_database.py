@@ -5,12 +5,32 @@ from pathlib import Path
 import pytest
 
 from service.models import Document
-from service.service_database import (count_all_documents, count_documents_between, open_database,
+from service.service_database import (SCHEMA_VERSION, count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
 
 
 def document(received: date, staff: str = '植田') -> Document:
     return Document(received, received, '診断書', '内科', '佐藤', staff)
+
+
+def test_open_database_sets_schema_version(tmp_path: Path) -> None:
+    with open_database(str(tmp_path / 'database.db')) as connection:
+        assert connection.execute('PRAGMA user_version').fetchone()[0] == SCHEMA_VERSION
+
+
+def test_open_database_rejects_newer_schema(tmp_path: Path) -> None:
+    path = tmp_path / 'database.db'
+    newer_connection = sqlite3.connect(path)
+    newer_connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION + 1}')
+    newer_connection.close()
+
+    with pytest.raises(RuntimeError, match='新しい'):
+        with open_database(str(path)):
+            pass
+    # 新しい版の DB にはテーブルを足さない
+    check_connection = sqlite3.connect(path)
+    assert check_connection.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").fetchone()[0] == 0
+    check_connection.close()
 
 
 def test_open_database_creates_file_with_rollback_journal(tmp_path: Path) -> None:

@@ -8,6 +8,10 @@ from openpyxl.utils.datetime import from_excel
 from service.models import Document, Draft, RowError, SourceData
 
 DATE_PATTERN = re.compile(r'\d{4}/\d{1,2}/\d{1,2}')
+# 元データのファイル名の末尾の日時(…_YYYYMMDDhhmm.xlsm)
+SOURCE_FILE_PATTERN = re.compile(r'_(\d{12})\.xlsm$', re.IGNORECASE)
+# Excel が開いている間に作る一時ファイルの先頭
+EXCEL_LOCK_FILE_PREFIX = '~$'
 RECEIVED_DATE_COLUMN = '預り日'
 REQUESTED_DATE_COLUMN = '医師依頼日'
 DOCUMENT_NAME_COLUMN = '文書名'
@@ -34,6 +38,16 @@ def to_date(value: object) -> date | None:
     if not DATE_PATTERN.fullmatch(text):
         raise ValueError(text)
     return datetime.strptime(text, '%Y/%m/%d').date()
+
+
+def find_latest_source(directory: str) -> Path:
+    """フォルダ内で、ファイル名の日時(…_YYYYMMDDhhmm.xlsm)が最も新しい元データを返す。無ければ FileNotFoundError"""
+    candidates = [(match.group(1), path) for path in Path(directory).glob('*.xlsm')
+                  if not path.name.startswith(EXCEL_LOCK_FILE_PREFIX)
+                  and (match := SOURCE_FILE_PATTERN.search(path.name))]
+    if not candidates:
+        raise FileNotFoundError(f'{directory} に元データ(ファイル名が「_年月日時分.xlsm」で終わるもの)がありません')
+    return max(candidates)[1]
 
 
 def to_text(value: object) -> str:

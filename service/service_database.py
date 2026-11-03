@@ -7,6 +7,8 @@ from pathlib import Path
 from service.models import Document
 
 BUSY_TIMEOUT_SECONDS = 10
+# スキーマを変えたら上げ、migrate に古い版からの変更を足す
+SCHEMA_VERSION = 1
 # 集計・取り込みの対象にする期間は預り日で決める
 PERIOD_CONDITION = 'received_date BETWEEN ? AND ?'
 
@@ -45,9 +47,24 @@ def connect(database_path: str) -> sqlite3.Connection:
     connection = sqlite3.connect(database_path, timeout=BUSY_TIMEOUT_SECONDS)
     # 共有フォルダ上では WAL が使えないため、ロールバックジャーナルにする
     connection.execute('PRAGMA journal_mode=DELETE')
-    connection.executescript(SCHEMA)
-    _add_patient_id_column(connection)
+    try:
+        migrate(connection)
+    except Exception:
+        connection.close()
+        raise
     return connection
+
+
+def migrate(connection: sqlite3.Connection) -> None:
+    """PRAGMA user_version で DB の版を見て、テーブルを作り、古い DB を今のスキーマにそろえる。
+    ほかのアプリ(移植版)が新しい版にした DB は、壊さないよう開かない"""
+    version = connection.execute('PRAGMA user_version').fetchone()[0]
+    if version > SCHEMA_VERSION:
+        raise RuntimeError(f'データベースの版({version})がこのアプリ(版 {SCHEMA_VERSION})より新しいため開けません')
+    connection.executescript(SCHEMA)
+    if version < 1:
+        _add_patient_id_column(connection)
+    connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
 
 
 def _add_patient_id_column(connection: sqlite3.Connection) -> None:

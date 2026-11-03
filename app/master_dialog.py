@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from app import constants
+from service.service_data_analyzer import OPINION_LABEL
 from service.service_master import ADMIN_ROLE, STAFF_ROLE, Department, Staff
 from service.service_medical_docs_analyzer import MedicalDocsAnalyzer
 
@@ -199,6 +200,11 @@ class MasterDialog:
         name = self.department_name_var.get().strip()
         if not name:
             messagebox.showerror(constants.ERROR_TITLE, constants.NAME_REQUIRED_MESSAGE, parent=self.dialog)
+            return
+        # 推移の選択欄で診療科と見分けられなくなるため、集計の項目名は使わせない
+        if name in (constants.TOTAL_ROW_LABEL, OPINION_LABEL):
+            messagebox.showerror(constants.ERROR_TITLE, constants.RESERVED_DEPARTMENT_MESSAGE.format(name=name),
+                                 parent=self.dialog)
             return
         try:
             department = Department(name, parse_order(self.department_order_var.get()))

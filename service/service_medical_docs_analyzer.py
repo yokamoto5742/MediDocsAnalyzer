@@ -9,11 +9,11 @@ from service import service_auth, service_master
 from service.models import Draft, NoDataError, SourceData
 from service.service_auth import LoginResult
 from service.service_backup import backup_database_daily
-from service.service_data_analyzer import (TOTAL_LABEL, OverallSummary, StaffCounts, TrendCounts, count_documents,
-                                           count_staff_documents, count_trend)
+from service.service_data_analyzer import (TOTAL_LABEL, DocumentFilter, OverallSummary, StaffCounts, TrendCounts,
+                                           count_documents, count_staff_documents, count_trend)
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
-from service.service_excel_reader import read_documents
+from service.service_excel_reader import find_latest_source, read_documents
 from service.service_excel_writer import save_results, save_staff_results, save_trend_results
 from service.service_master import Department, Staff
 from service.service_overview import DEFAULT_PENDING_DAYS, Overview, make_overview
@@ -21,10 +21,16 @@ from utils.config_manager import load_config
 
 DEFAULT_KEEP_GENERATIONS = 30
 TOP_DOCUMENT_COUNT = 10
+DEFAULT_SOURCE_DIR = r'C:\Shinseikai\MediDocsAnalyzer'
 
 
 def split_list(text: str) -> list[str]:
     return [item.strip() for item in text.split(',') if item.strip()]
+
+
+def source_file_path() -> str:
+    """設定した元データのフォルダで、ファイル名の日時が最も新しい xlsm"""
+    return str(find_latest_source(load_config().get('PATHS', 'source_dir', fallback=DEFAULT_SOURCE_DIR)))
 
 
 @dataclass
@@ -43,7 +49,8 @@ class MedicalDocsAnalyzer:
         # 起動後に設定ファイルが編集されていても反映されるよう、実行のたびに読み込む
         config = load_config()
         with open_database(config['PATHS']['database_path']) as connection:
-            departments = [name for name in split_list(config.get('Analysis', 'clinical_departments', fallback=''))
+            # 旧版の設定ファイルは clinical_departments の先頭に「合計」があるため除く
+            departments =[name for name in split_list(config.get('Analysis', 'clinical_departments', fallback=''))
                            if name != TOTAL_LABEL]
             service_master.seed_masters(
                 connection, split_list(config.get('Analysis', 'ordered_names', fallback='')), departments)
@@ -51,7 +58,7 @@ class MedicalDocsAnalyzer:
 
     def prepare_source_import(self) -> ImportPlan:
         """元データ(xlsm)を取り込む計画を返す"""
-        return self._prepare_import(load_config()['PATHS']['source_file_path'])
+        return self._prepare_import(source_file_path())
 
     def prepare_legacy_import(self) -> ImportPlan:
         """旧 DB(xlsx)を取り込む計画を返す"""
@@ -86,7 +93,7 @@ class MedicalDocsAnalyzer:
 
     def load_overview(self, today: date) -> Overview:
         """元データを読み、概要を返す。下書きの判定にマスタは使わないため DB は開かない"""
-        source = read_documents(load_config()['PATHS']['source_file_path'])
+        source = read_documents(source_file_path())
         return self.overview(source.drafts, today)
 
     def backup_database(self, today: date) -> Path | None:
@@ -161,17 +168,18 @@ class MedicalDocsAnalyzer:
         return save_staff_results(self.staff_summary(staff_name, start_date, end_date, TOP_DOCUMENT_COUNT),
                                   start_date, end_date, output_dir)
 
-    def trend_summary(self, department: str | None, start_date: date, end_date: date, year_start_month: int,
+    def trend_summary(self, document_filter: DocumentFilter, start_date: date, end_date: date, year_start_month: int,
                       today: date, staff_name: str | None = None) -> TrendCounts:
-        """医師依頼日が範囲内の DB の文書を、年(年度)ごとの月別に数える。
-        department が None なら全診療科、staff_name が None なら全担当者"""
+        """医師依頼日が範囲内で document_filter に合う DB の文書を、年(年度)ごとの月別に数える。
+        staff_name が None なら全担当者"""
         with self._open_database() as connection:
-            return count_trend(connection, department, start_date, end_date, year_start_month, today, staff_name)
+            return count_trend(connection, document_filter, start_date, end_date, year_start_month, today,
+                               staff_name)
 
-    def export_trend(self, subject: str, department: str | None, start_date: date, end_date: date,
+    def export_trend(self, subject: str, document_filter: DocumentFilter, start_date: date, end_date: date,
                      year_start_month: int, today: date, staff_name: str | None = None) -> str:
         """全体推移(staff_name を渡せば個人推移)を Excel に保存し、保存先のパスを返す。subject は表題に出す対象"""
-        trend = self.trend_summary(department, start_date, end_date, year_start_month, today, staff_name)
+        trend = self.trend_summary(document_filter, start_date, end_date, year_start_month, today, staff_name)
         return save_trend_results(trend, subject, start_date, end_date, load_config()['PATHS']['output_dir'])
 
     def run_analysis(self, start_date: date, end_date: date) -> str:

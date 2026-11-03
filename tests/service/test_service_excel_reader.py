@@ -5,8 +5,28 @@ import pytest
 from openpyxl import Workbook
 
 from service.models import Document, Draft
-from service.service_excel_reader import read_documents, to_date
+from service.service_excel_reader import find_latest_source, read_documents, to_date
 from tests.service.conftest import MakeWorkbook
+
+
+def test_find_latest_source_uses_timestamp_in_file_name(tmp_path: Path) -> None:
+    for name in ('医療文書担当一覧_202611030740.xlsm', '医療文書担当一覧_202611021800.xlsm',
+                 '~$医療文書担当一覧_202612010000.xlsm', '医療文書担当一覧_202612010000.xlsx',
+                 '医療文書担当一覧.xlsm', '医療文書担当一覧_20261201.xlsm'):
+        (tmp_path / name).touch()
+    # 古いファイルを後から書き換えても、更新日時ではなくファイル名の日時で選ぶ
+    (tmp_path / '医療文書担当一覧_202611021800.xlsm').write_bytes(b'')
+
+    assert find_latest_source(str(tmp_path)) == tmp_path / '医療文書担当一覧_202611030740.xlsm'
+
+
+def test_find_latest_source_raises_without_source(tmp_path: Path) -> None:
+    (tmp_path / '医療文書担当一覧.xlsm').touch()
+
+    with pytest.raises(FileNotFoundError):
+        find_latest_source(str(tmp_path))
+    with pytest.raises(FileNotFoundError):
+        find_latest_source(str(tmp_path / 'missing'))
 
 
 @pytest.mark.parametrize(('value', 'expected'), [
