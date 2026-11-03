@@ -11,7 +11,7 @@ from app import constants
 from app.charts import overall_figure, staff_figure, trend_figure
 from app.date_entry import make_date_entry
 from service.models import Draft
-from service.service_data_analyzer import OPINION_LABEL, OverallSummary, StaffCounts, TrendCounts
+from service.service_data_analyzer import OverallSummary, StaffCounts, TrendCounts
 from service.service_overview import DraftStatus, Overview, draft_status
 
 OVERVIEW_COLUMN_WIDTHS = (90, 80, 240, 100, 90, 80, 90, 150)
@@ -257,10 +257,10 @@ class ResultView:
     def show_overall(self, summary: OverallSummary) -> None:
         counts = summary.counts
         self.overall_title.configure(text=constants.OVERALL_TITLE_FORMAT.format(
-            first=counts.first_date, last=counts.last_date, total=counts.total))
-        # 主治医意見書は診療科の件数にも含まれるため、合計の後ではなく最後の列に置く
-        columns = [constants.STAFF_NAME_HEADER, constants.TOTAL_ROW_LABEL, *summary.departments, OPINION_LABEL]
-        rows = [[*row, opinion] for row, opinion in zip(summary.rows, summary.opinion_counts)]
+            first=counts.first_date, last=counts.last_date, document_type=summary.document_type.value,
+            total=counts.total))
+        columns = [constants.STAFF_NAME_HEADER, constants.TOTAL_ROW_LABEL, *summary.departments]
+        rows = summary.rows
         self.overall_staff_rows, self.overall_total_row = rows[:-1], rows[-1]
         self.overall_sort = None
         fill_tree(self.overall_tree, columns, rows)
@@ -292,7 +292,8 @@ class ResultView:
             self.staff_var.set(names[0] if names else '')
 
     def show_staff(self, staff_counts: StaffCounts) -> None:
-        self.staff_total_label.configure(text=constants.STAFF_TOTAL_FORMAT.format(total=staff_counts.total))
+        self.staff_total_label.configure(text=constants.STAFF_TOTAL_FORMAT.format(
+            document_type=staff_counts.document_type.value, total=staff_counts.total))
         fill_tree(self.department_tree, list(constants.STAFF_DEPARTMENT_COLUMNS),
                   [list(row) for row in staff_counts.by_department])
         fill_tree(self.document_tree, list(constants.STAFF_DOCUMENT_COLUMNS),

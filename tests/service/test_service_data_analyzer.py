@@ -5,8 +5,9 @@ from datetime import date
 import pytest
 
 from service.models import Document, NoDataError
-from service.service_data_analyzer import (DocumentCounts, DocumentFilter, OverallSummary, count_documents,
-                                           count_staff_documents, count_trend, months_between)
+from service.service_data_analyzer import (DocumentCounts, DocumentFilter, DocumentType, OverallSummary,
+                                           count_documents, count_staff_documents, count_trend, months_between,
+                                           trend_subject)
 from service.service_database import connect, replace_documents_between
 
 
@@ -62,32 +63,54 @@ def opinion_connection() -> Iterator[sqlite3.Connection]:
     connection.close()
 
 
-def test_count_documents_counts_opinion_in_both_department_and_opinion(
-        opinion_connection: sqlite3.Connection) -> None:
-    counts = count_documents(opinion_connection, date(2025, 4, 1), date(2025, 4, 30))
+@pytest.mark.parametrize(('document_type', 'expected_rows'), [
+    (DocumentType.ALL, [['植田', 3, 2, 1], ['花﨑', 1, 0, 1], ['合計', 4, 2, 2]]),
+    (DocumentType.MEDICAL, [['植田', 1, 1, 0], ['花﨑', 0, 0, 0], ['合計', 1, 1, 0]]),
+    (DocumentType.OPINION, [['植田', 2, 1, 1], ['花﨑', 1, 0, 1], ['合計', 3, 1, 2]]),
+])
+def test_count_documents_by_document_type(opinion_connection: sqlite3.Connection, document_type: DocumentType,
+                                          expected_rows: list[list[str | int]]) -> None:
+    counts = count_documents(opinion_connection, date(2025, 4, 1), date(2025, 4, 30), document_type)
 
-    assert counts.opinion_by_staff == {'植田': 2, '花﨑': 1}
-    summary = OverallSummary(counts, ['植田', '花﨑'], ['内科', '外科'])
-    # 診療科の件数・合計はそのままで、主治医意見書の列を別に数える
-    assert summary.rows == [['植田', 3, 2, 1], ['花﨑', 1, 0, 1], ['合計', 4, 2, 2]]
-    assert summary.opinion_counts == [2, 1, 3]
-
-
-def test_count_staff_documents_adds_opinion_after_departments(opinion_connection: sqlite3.Connection) -> None:
-    counts = count_staff_documents(opinion_connection, '植田', date(2025, 4, 1), date(2025, 4, 30))
-
-    assert counts.total == 3
-    assert counts.by_department == [('内科', 2), ('外科', 1), ('主治医意見書', 2)]
+    assert OverallSummary(counts, ['植田', '花﨑'], ['内科', '外科']).rows == expected_rows
 
 
-def test_count_trend_opinion_only(opinion_connection: sqlite3.Connection) -> None:
-    trend = count_trend(opinion_connection, DocumentFilter(opinion_only=True), date(2025, 4, 1), date(2025, 5, 31),
-                        4, date(2025, 5, 31))
+def test_count_documents_medical_and_opinion_add_up_to_all(opinion_connection: sqlite3.Connection) -> None:
+    def total(document_type: DocumentType) -> int:
+        return count_documents(opinion_connection, date(2025, 4, 1), date(2025, 4, 30), document_type).total
+
+    assert total(DocumentType.MEDICAL) + total(DocumentType.OPINION) == total(DocumentType.ALL)
+
+
+def test_count_staff_documents_by_document_type(opinion_connection: sqlite3.Connection) -> None:
+    all_counts = count_staff_documents(opinion_connection, '植田', date(2025, 4, 1), date(2025, 4, 30))
+    opinion = count_staff_documents(opinion_connection, '植田', date(2025, 4, 1), date(2025, 4, 30),
+                                    document_type=DocumentType.OPINION)
+    medical = count_staff_documents(opinion_connection, '植田', date(2025, 4, 1), date(2025, 4, 30),
+                                    document_type=DocumentType.MEDICAL)
+
+    assert (all_counts.total, all_counts.by_department) == (3, [('内科', 2), ('外科', 1)])
+    assert (opinion.total, opinion.by_department) == (2, [('内科', 1), ('外科', 1)])
+    assert (medical.total, medical.by_department, medical.by_document) == (1, [('内科', 1)], [('診断書', 1)])
+    assert medical.document_type == DocumentType.MEDICAL
+
+
+def test_count_trend_by_document_type(opinion_connection: sqlite3.Connection) -> None:
+    opinion = DocumentFilter(document_type=DocumentType.OPINION)
+    trend = count_trend(opinion_connection, opinion, date(2025, 4, 1), date(2025, 5, 31), 4, date(2025, 5, 31))
 
     assert trend.by_year == [(2025, [2, 1, *[None] * 10])]
-    staff_trend = count_trend(opinion_connection, DocumentFilter(opinion_only=True), date(2025, 4, 1),
+    staff_trend = count_trend(opinion_connection, opinion, date(2025, 4, 1),
                               date(2025, 5, 31), 4, date(2025, 5, 31), '花﨑')
     assert staff_trend.by_year == [(2025, [0, 1, *[None] * 10])]
+    medical_surgery = count_trend(opinion_connection, DocumentFilter('内科', DocumentType.MEDICAL),
+                                  date(2025, 4, 1), date(2025, 5, 31), 4, date(2025, 5, 31))
+    assert medical_surgery.by_year == [(2025, [1, 0, *[None] * 10])]
+
+
+def test_trend_subject() -> None:
+    assert trend_subject(DocumentFilter(), None) == '全書類'
+    assert trend_subject(DocumentFilter('外科', DocumentType.MEDICAL), '植田') == '植田 医療文書 外科'
 
 
 def test_months_between() -> None:

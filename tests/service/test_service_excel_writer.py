@@ -4,7 +4,7 @@ from pathlib import Path
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from service.service_data_analyzer import DocumentCounts, OverallSummary, StaffCounts, TrendCounts
+from service.service_data_analyzer import DocumentCounts, DocumentType, OverallSummary, StaffCounts, TrendCounts
 from service.service_excel_writer import save_results, save_staff_results, save_trend_results
 
 TITLE = '医療文書作成件数'
@@ -34,12 +34,12 @@ def test_save_results(tmp_path: Path) -> None:
         last_date=date(2025, 5, 20),
     )
 
-    output_path = save_results(OverallSummary(counts, ['植田', '花﨑'], ['内科', '外科']),
+    output_path = save_results(OverallSummary(counts, ['植田', '花﨑'], ['内科', '外科'], DocumentType.MEDICAL),
                                str(template_path), str(tmp_path / 'output'))
 
-    assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数20250401-20250520.xlsx'
+    assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数_医療文書_20250401-20250520.xlsx'
     assert sheet_values(active_sheet(output_path)) == [
-        ['医療文書作成件数 2025年04月01日-2025年05月20日', None, None, None],
+        ['医療文書作成件数 医療文書 2025年04月01日-2025年05月20日', None, None, None],
         ['氏名', '合計', '内科', '外科'],
         ['植田', 2, 2, 0],
         ['花﨑', 1, 0, 1],
@@ -56,8 +56,9 @@ def test_save_staff_results(tmp_path: Path) -> None:
 
     output_path = save_staff_results(staff_counts, date(2025, 4, 1), date(2025, 5, 31), str(tmp_path / 'output'))
 
-    assert Path(output_path).name == f'{TITLE}_{STAFF_NAME}_20250401-20250531.xlsx'
+    assert Path(output_path).name == f'{TITLE}_{STAFF_NAME}_全書類_20250401-20250531.xlsx'
     sheet = active_sheet(output_path)
+    assert sheet['A1'].value == f'{TITLE} {STAFF_NAME} 全書類 2025年04月01日-2025年05月31日'
     assert sheet['B2'].value == 3
     assert (sheet['D2'].value, sheet['E2'].value) == (None, None)
     values = sheet_values(sheet)

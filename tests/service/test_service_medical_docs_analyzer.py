@@ -6,7 +6,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 from service.models import NoDataError
-from service.service_data_analyzer import DocumentFilter
+from service.service_data_analyzer import DocumentFilter, DocumentType
 from service.service_database import open_database
 from service.service_master import Department
 from service.service_medical_docs_analyzer import TOP_DOCUMENT_COUNT, MedicalDocsAnalyzer, split_list
@@ -170,7 +170,7 @@ def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook) -> None:
 
     output_path = analyzer.run_analysis(date(2025, 4, 1), date(2025, 6, 30))
 
-    assert Path(output_path).name == '医療文書作成件数20250401-20250510.xlsx'
+    assert Path(output_path).name == '医療文書作成件数_全書類_20250401-20250510.xlsx'
     sheet = load_workbook(output_path).active
     assert sheet is not None
     assert [list(row) for row in sheet.iter_rows(min_row=2, values_only=True)] == [
@@ -219,7 +219,7 @@ def test_export_staff(config_path: Path, make_workbook: MakeWorkbook) -> None:
 
     output_path = analyzer.export_staff('花﨑', date(2025, 4, 1), date(2025, 4, 30))
 
-    assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数_花﨑_20250401-20250430.xlsx'
+    assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数_花﨑_全書類_20250401-20250430.xlsx'
     assert load_workbook(output_path)['個人']['B2'].value == 1
 
 
@@ -229,9 +229,10 @@ def test_export_staff_limits_documents_to_top(config_path: Path, monkeypatch: py
     monkeypatch.setattr(analyzer, 'staff_summary', staff_summary)
     monkeypatch.setattr('service.service_medical_docs_analyzer.save_staff_results', MagicMock(return_value='x'))
 
-    analyzer.export_staff('花﨑', date(2025, 4, 1), date(2025, 4, 30))
+    analyzer.export_staff('花﨑', date(2025, 4, 1), date(2025, 4, 30), DocumentType.OPINION)
 
-    staff_summary.assert_called_once_with('花﨑', date(2025, 4, 1), date(2025, 4, 30), TOP_DOCUMENT_COUNT)
+    staff_summary.assert_called_once_with('花﨑', date(2025, 4, 1), date(2025, 4, 30), TOP_DOCUMENT_COUNT,
+                                          DocumentType.OPINION)
 
 
 def test_trend_summary_and_export(config_path: Path, make_workbook: MakeWorkbook) -> None:

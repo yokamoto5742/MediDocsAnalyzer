@@ -15,7 +15,7 @@ from app.master_dialog import MasterDialog
 from app.result_view import ResultView, TrendPanel
 from app.settings_dialog import SettingsDialog
 from service.models import Draft, NoDataError
-from service.service_data_analyzer import OPINION_LABEL, DocumentFilter, trend_subject
+from service.service_data_analyzer import DocumentFilter, DocumentType, trend_subject
 from service.service_master import ADMIN_ROLE, Staff
 from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
 from utils.config_manager import load_config, update_config
@@ -30,23 +30,21 @@ STAFF_TREND_SECTION = 'StaffTrend'
 @dataclass
 class TrendRequest:
     """推移タブで選んだ内容"""
-    department: str  # 選択欄の表示。「合計」なら全文書、「主治医意見書」なら全診療科の主治医意見書
+    department: str  # 選択欄の表示。「合計」なら全診療科
+    document_type: DocumentType  # 左側の集計対象
     staff_name: str | None  # None なら全担当者(全体推移)
     start_date: date
     end_date: date
 
     @property
     def document_filter(self) -> DocumentFilter:
-        """選択欄の表示を、サービスへ渡す絞り込みにする"""
-        if self.department == constants.TOTAL_ROW_LABEL:
-            return DocumentFilter()
-        if self.department == OPINION_LABEL:
-            return DocumentFilter(opinion_only=True)
-        return DocumentFilter(department=self.department)
+        """選択欄の表示と集計対象を、サービスへ渡す絞り込みにする"""
+        department = None if self.department == constants.TOTAL_ROW_LABEL else self.department
+        return DocumentFilter(department, self.document_type)
 
     @property
     def subject(self) -> str:
-        return trend_subject(self.department, self.staff_name)
+        return trend_subject(self.document_filter, self.staff_name)
 
 
 class MedicalDocsAnalyzerGUI:
@@ -65,6 +63,8 @@ class MedicalDocsAnalyzerGUI:
 
         # 画面に出している集計の期間。未集計なら None
         self.period: tuple[date, date] | None = None
+        # 最後に「集計開始」で確定した集計対象。推移タブもこれで絞る
+        self.document_type = self._load_saved_document_type()
         self._setup_gui()
 
     def start(self) -> None:
@@ -81,6 +81,7 @@ class MedicalDocsAnalyzerGUI:
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         self._setup_date_frame(main_frame)
+        self._setup_document_type_frame(main_frame)
         self._setup_buttons(main_frame)
 
         self.result_view = ResultView(
@@ -140,8 +141,10 @@ class MedicalDocsAnalyzerGUI:
                                year_start_month: int) -> None:
         ttk.Label(date_frame, text=constants.YEAR_LABEL).grid(row=0, column=0, padx=5, pady=5)
         self.year_var = tk.StringVar(value=str(initial_year))
-        ttk.Spinbox(date_frame, from_=2000, to=2100, width=6, textvariable=self.year_var,
-                    command=self._apply_period).grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        year_entry = ttk.Entry(date_frame, width=6, textvariable=self.year_var)
+        year_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        year_entry.bind('<Return>', self._apply_period)
+        year_entry.bind('<FocusOut>', self._apply_period)
 
         self.year_start_month_var = tk.IntVar(value=year_start_month)
         year_start_frame = ttk.Frame(date_frame)
@@ -170,20 +173,35 @@ class MedicalDocsAnalyzerGUI:
         self.start_date.set_date(start_date)
         self.end_date.set_date(end_date)
 
+    def _load_saved_document_type(self) -> DocumentType:
+        try:
+            return DocumentType(self.config.get('Analysis', 'document_type', fallback=DocumentType.ALL.value))
+        except ValueError:
+            return DocumentType.ALL
+
+    def _setup_document_type_frame(self, parent: ttk.Frame) -> None:
+        """集計対象の選択欄。選んだ値は「集計開始」を押したときに確定する"""
+        document_type_frame = ttk.LabelFrame(parent, text=constants.DOCUMENT_TYPE_LABEL, padding="5")
+        document_type_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        self.document_type_var = tk.StringVar(value=self.document_type.value)
+        ttk.Combobox(document_type_frame, width=12, state='readonly', textvariable=self.document_type_var,
+                     values=[document_type.value for document_type in DocumentType]).grid(
+            row=0, column=0, sticky=tk.W, padx=5, pady=5)
+
     def _setup_buttons(self, parent: ttk.Frame) -> None:
         ttk.Button(parent, text=constants.START_ANALYSIS_BUTTON_LABEL, command=self.start_analysis).grid(
-            row=2, column=0, columnspan=2, pady=10)
+            row=3, column=0, columnspan=2, pady=10)
         master_button = ttk.Button(parent, text=constants.MASTER_BUTTON_LABEL, command=self.open_master)
-        master_button.grid(row=3, column=0, columnspan=2, pady=5)
+        master_button.grid(row=4, column=0, columnspan=2, pady=5)
         load_button = ttk.Button(parent, text=constants.EXCEL_IMPORT_BUTTON_LABEL, command=self.load_excel)
-        load_button.grid(row=4, column=0, columnspan=2, pady=5)
+        load_button.grid(row=5, column=0, columnspan=2, pady=5)
         settings_button = ttk.Button(parent, text=constants.SETTINGS_BUTTON_LABEL, command=self.open_settings)
-        settings_button.grid(row=5, column=0, columnspan=2, pady=5)
+        settings_button.grid(row=6, column=0, columnspan=2, pady=5)
         if self.user is not None:
             ttk.Button(parent, text=constants.CHANGE_PASSWORD_BUTTON_LABEL, command=self.change_password).grid(
-                row=6, column=0, columnspan=2, pady=5)
+                row=7, column=0, columnspan=2, pady=5)
         ttk.Button(parent, text=constants.CLOSE_BUTTON_LABEL, command=self.root.quit).grid(
-            row=7, column=0, columnspan=2, pady=5)
+            row=8, column=0, columnspan=2, pady=5)
         self.admin_buttons = [load_button, master_button, settings_button]
 
     def backup_database(self) -> None:
@@ -246,9 +264,14 @@ class MedicalDocsAnalyzerGUI:
             return
         self.refresh_overview(plan.source.drafts)
 
+        document_type = DocumentType(self.document_type_var.get())
+        if document_type != self.document_type:
+            self.document_type = document_type
+            self.refresh_trends()
+
         try:
             self._save_analysis_settings(start_date, end_date)
-            summary = self.analyzer.overall_summary(start_date, end_date)
+            summary = self.analyzer.overall_summary(start_date, end_date, document_type)
         except NoDataError:
             messagebox.showerror(constants.ERROR_TITLE, constants.NO_DATA_MESSAGE)
             return
@@ -274,7 +297,8 @@ class MedicalDocsAnalyzerGUI:
         if self.period is None or not staff_name:
             return
         try:
-            self.result_view.show_staff(self.analyzer.staff_summary(staff_name, *self.period))
+            self.result_view.show_staff(self.analyzer.staff_summary(staff_name, *self.period,
+                                                                    document_type=self.document_type))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.ANALYSIS_ERROR_MESSAGE.format(error=e))
 
@@ -283,7 +307,7 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.NOT_ANALYZED_ERROR_MESSAGE)
             return
         try:
-            open_folder_of(self.analyzer.run_analysis(*self.period))
+            open_folder_of(self.analyzer.run_analysis(*self.period, self.document_type))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
@@ -293,7 +317,7 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.NOT_ANALYZED_ERROR_MESSAGE)
             return
         try:
-            open_folder_of(self.analyzer.export_staff(staff_name, *self.period))
+            open_folder_of(self.analyzer.export_staff(staff_name, *self.period, self.document_type))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
@@ -320,7 +344,7 @@ class MedicalDocsAnalyzerGUI:
         except Exception as e:
             panel.show_error(constants.TREND_ERROR_FORMAT.format(name=panel.name, error=e))
             return
-        panel.set_departments([constants.TOTAL_ROW_LABEL, OPINION_LABEL, *departments],
+        panel.set_departments([constants.TOTAL_ROW_LABEL, *departments],
                               self.config.get(section, 'department', fallback=constants.TOTAL_ROW_LABEL))
         self._refresh_trend_panel(panel, section)
 
@@ -330,15 +354,21 @@ class MedicalDocsAnalyzerGUI:
             return [self.restricted_staff]
         return [staff.name for staff in self.analyzer.list_staff()]
 
-    @staticmethod
-    def _read_trend_request(panel: TrendPanel) -> TrendRequest | None:
+    def _read_trend_request(self, panel: TrendPanel) -> TrendRequest | None:
         """推移タブの選択と範囲。個人推移で担当者がいなければ None。範囲が正しくなければ ValueError"""
         department = panel.selected_department()
         staff_name = panel.selected_staff()
         # selected_staff() は、全体推移なら None、個人推移で担当者がいなければ '' を返す
         if not department or staff_name == '':
             return None
-        return TrendRequest(department, staff_name, *read_date_range(panel.start_date, panel.end_date))
+        return TrendRequest(department, self.document_type, staff_name,
+                            *read_date_range(panel.start_date, panel.end_date))
+
+    def refresh_trends(self) -> None:
+        """集計対象を変えたときに推移を集計し直す。職員は全体推移を見られない"""
+        if self.restricted_staff is None:
+            self.refresh_trend()
+        self.refresh_staff_trend()
 
     def refresh_trend(self) -> None:
         self._refresh_trend_panel(self.result_view.trend, TREND_SECTION)
@@ -397,7 +427,8 @@ class MedicalDocsAnalyzerGUI:
         update_config({'Analysis': {
             'start_date': start_date.isoformat(),
             'end_date': end_date.isoformat(),
-            'year_start_month': str(self.year_start_month_var.get())
+            'year_start_month': str(self.year_start_month_var.get()),
+            'document_type': self.document_type.value,
         }})
 
     def change_password(self) -> None:

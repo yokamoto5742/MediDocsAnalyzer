@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from openpyxl import Workbook
 
-from service.service_data_analyzer import count_documents
+from service.service_data_analyzer import DocumentType, count_documents
 from service.service_database import connect, replace_documents_between
 from service.service_excel_reader import read_documents
 
@@ -64,11 +64,16 @@ def test_count_documents_matches_golden(golden: dict[str, Any], golden_path: Pat
     assert source.first_received_date is not None and source.last_received_date is not None
     replace_documents_between(connection, source.first_received_date, source.last_received_date, source.documents)
 
-    counts = count_documents(connection, date.fromisoformat(expected['start_date']),
-                             date.fromisoformat(expected['end_date']))
+    start_date = date.fromisoformat(expected['start_date'])
+    end_date = date.fromisoformat(expected['end_date'])
+    counts = count_documents(connection, start_date, end_date)
+    by_document_type = {
+        name: sorted([staff, department, count] for (staff, department), count
+                     in count_documents(connection, start_date, end_date, DocumentType(name)).by_staff_department.items())
+        for name in expected['by_document_type']}
     connection.close()
 
     assert sorted([staff, department, count] for (staff, department), count
                   in counts.by_staff_department.items()) == expected['by_staff_department']
     assert counts.total == expected['total']
-    assert counts.opinion_by_staff == expected['opinion_by_staff']
+    assert by_document_type == expected['by_document_type']

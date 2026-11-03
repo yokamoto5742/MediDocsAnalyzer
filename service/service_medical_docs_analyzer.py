@@ -9,7 +9,7 @@ from service import service_auth, service_master
 from service.models import Draft, NoDataError, SourceData
 from service.service_auth import LoginResult
 from service.service_backup import backup_database_daily
-from service.service_data_analyzer import (TOTAL_LABEL, DocumentFilter, OverallSummary, StaffCounts, TrendCounts,
+from service.service_data_analyzer import (TOTAL_LABEL, DocumentFilter, DocumentType, OverallSummary, StaffCounts, TrendCounts,
                                            count_documents, count_staff_documents, count_trend)
 from service.service_database import (count_all_documents, count_documents_between, open_database,
                                       replace_documents_between)
@@ -144,29 +144,33 @@ class MedicalDocsAnalyzer:
         with self._open_database() as connection:
             service_master.delete_department(connection, name)
 
-    def overall_summary(self, start_date: date, end_date: date) -> OverallSummary:
-        """期間内の文書を担当者×診療科で集計する。期間内に文書がなければ NoDataError"""
+    def overall_summary(self, start_date: date, end_date: date,
+                        document_type: DocumentType = DocumentType.ALL) -> OverallSummary:
+        """期間内で集計対象の文書を担当者×診療科で集計する。期間内に文書がなければ NoDataError"""
         with self._open_database() as connection:
-            counts = count_documents(connection, start_date, end_date)
+            counts = count_documents(connection, start_date, end_date, document_type)
             staff_list = service_master.list_staff(connection)
             departments = service_master.list_departments(connection)
 
         # 退職した担当者も、期間内に件数があれば並べる
         counted_staff = {staff for staff, _ in counts.by_staff_department}
         staff_members = [staff.name for staff in staff_list if staff.active or staff.name in counted_staff]
-        return OverallSummary(counts, staff_members, [department.name for department in departments])
+        return OverallSummary(counts, staff_members, [department.name for department in departments],
+                              document_type)
 
     def staff_summary(self, staff_name: str, start_date: date, end_date: date,
-                      document_limit: int | None = None) -> StaffCounts:
+                      document_limit: int | None = None,
+                      document_type: DocumentType = DocumentType.ALL) -> StaffCounts:
         """画面ではスクロールで全件を見るため、文書名は既定で全件を返す"""
         with self._open_database() as connection:
-            return count_staff_documents(connection, staff_name, start_date, end_date, document_limit)
+            return count_staff_documents(connection, staff_name, start_date, end_date, document_limit, document_type)
 
-    def export_staff(self, staff_name: str, start_date: date, end_date: date) -> str:
+    def export_staff(self, staff_name: str, start_date: date, end_date: date,
+                     document_type: DocumentType = DocumentType.ALL) -> str:
         """1 人分の集計を Excel に保存し、保存先のパスを返す。A4 1 枚に収めるため文書名は上位だけ出す"""
         output_dir = load_config()['PATHS']['output_dir']
-        return save_staff_results(self.staff_summary(staff_name, start_date, end_date, TOP_DOCUMENT_COUNT),
-                                  start_date, end_date, output_dir)
+        staff_counts = self.staff_summary(staff_name, start_date, end_date, TOP_DOCUMENT_COUNT, document_type)
+        return save_staff_results(staff_counts, start_date, end_date, output_dir)
 
     def trend_summary(self, document_filter: DocumentFilter, start_date: date, end_date: date, year_start_month: int,
                       today: date, staff_name: str | None = None) -> TrendCounts:
@@ -182,8 +186,9 @@ class MedicalDocsAnalyzer:
         trend = self.trend_summary(document_filter, start_date, end_date, year_start_month, today, staff_name)
         return save_trend_results(trend, subject, start_date, end_date, load_config()['PATHS']['output_dir'])
 
-    def run_analysis(self, start_date: date, end_date: date) -> str:
-        """期間内の文書を集計して Excel に保存し、保存先のパスを返す"""
+    def run_analysis(self, start_date: date, end_date: date,
+                     document_type: DocumentType = DocumentType.ALL) -> str:
+        """期間内で集計対象の文書を集計して Excel に保存し、保存先のパスを返す"""
         paths_config = load_config()['PATHS']
-        summary = self.overall_summary(start_date, end_date)
+        summary = self.overall_summary(start_date, end_date, document_type)
         return save_results(summary, paths_config['template_path'], paths_config['output_dir'])

@@ -1,23 +1,39 @@
 import sqlite3
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 
 from service.models import NoDataError
 from service.service_database import PERIOD_CONDITION, period_parameters
 from utils.date_period import fiscal_year, get_period_range
 
 TOTAL_LABEL = '合計'
-# 文書名にこの語を含む文書を、診療科を問わず「主治医意見書」として数える
+# 文書名にこの語を含む文書を「主治医意見書」とする
 OPINION_LABEL = '主治医意見書'
-OPINION_CONDITION = f"document_name LIKE '%{OPINION_LABEL}%'"
+
+
+class DocumentType(Enum):
+    """集計対象。値は画面と Excel に出す名前"""
+    ALL = '全書類'
+    MEDICAL = '医療文書'  # 主治医意見書を除いた全書類
+    OPINION = OPINION_LABEL
+
+
+def document_type_condition(document_type: DocumentType) -> str:
+    """WHERE 句に足す集計対象の条件。全書類なら空文字"""
+    if document_type == DocumentType.OPINION:
+        return f" AND document_name LIKE '%{OPINION_LABEL}%'"
+    if document_type == DocumentType.MEDICAL:
+        return f" AND document_name NOT LIKE '%{OPINION_LABEL}%'"
+    return ''
 
 
 @dataclass(frozen=True)
 class DocumentFilter:
-    """推移で数える文書の絞り込み。既定は全文書"""
+    """推移で数える文書の絞り込み。既定は全診療科の全書類"""
     department: str | None = None
-    opinion_only: bool = False
+    document_type: DocumentType = DocumentType.ALL
 
 
 @dataclass
@@ -27,8 +43,6 @@ class DocumentCounts:
     total: int
     first_date: date
     last_date: date
-    # 担当者ごとの主治医意見書の件数。診療科の件数にも含まれている
-    opinion_by_staff: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -36,6 +50,7 @@ class OverallSummary:
     counts: DocumentCounts
     staff_members: list[str]
     departments: list[str]
+    document_type: DocumentType = DocumentType.ALL
 
     @property
     def rows(self) -> list[list[str | int]]:
@@ -51,12 +66,6 @@ class OverallSummary:
                      *(counts.by_department.get(department, 0) for department in self.departments)])
         return rows
 
-    @property
-    def opinion_counts(self) -> list[int]:
-        """rows の各行に並べる主治医意見書の件数。最後は合計行で、一覧にない担当者の件数も含む"""
-        opinion_by_staff = self.counts.opinion_by_staff
-        return [*(opinion_by_staff.get(staff, 0) for staff in self.staff_members), sum(opinion_by_staff.values())]
-
 
 @dataclass
 class StaffCounts:
@@ -65,6 +74,7 @@ class StaffCounts:
     by_department: list[tuple[str, int]]
     by_document: list[tuple[str, int]]
     by_month: list[tuple[str, int]]
+    document_type: DocumentType = DocumentType.ALL
 
 
 @dataclass
@@ -91,12 +101,14 @@ class TrendCounts:
                 for year, counts in self.by_year]
 
 
-def count_documents(connection: sqlite3.Connection, start_date: date, end_date: date) -> DocumentCounts:
-    """預り日が期間内の文書を、担当者×診療科、診療科ごと、全体で数える"""
+def count_documents(connection: sqlite3.Connection, start_date: date, end_date: date,
+                    document_type: DocumentType = DocumentType.ALL) -> DocumentCounts:
+    """預り日が期間内で集計対象の文書を、担当者×診療科、診療科ごと、全体で数える"""
     parameters = period_parameters(start_date, end_date)
+    condition = PERIOD_CONDITION + document_type_condition(document_type)
     by_staff_department = {
         (staff, department): count for staff, department, count in connection.execute(
-            f'SELECT staff_name, department, COUNT(*) FROM documents WHERE {PERIOD_CONDITION}'
+            f'SELECT staff_name, department, COUNT(*) FROM documents WHERE {condition}'
             ' GROUP BY staff_name, department', parameters)
     }
     if not by_staff_department:
@@ -106,11 +118,8 @@ def count_documents(connection: sqlite3.Connection, start_date: date, end_date: 
     for (_, department), count in by_staff_department.items():
         by_department[department] += count
     first_date, last_date = connection.execute(
-        f'SELECT MIN(received_date), MAX(received_date) FROM documents WHERE {PERIOD_CONDITION}',
+        f'SELECT MIN(received_date), MAX(received_date) FROM documents WHERE {condition}',
         parameters).fetchone()
-    opinion_by_staff = dict(connection.execute(
-        f'SELECT staff_name, COUNT(*) FROM documents WHERE {PERIOD_CONDITION} AND {OPINION_CONDITION}'
-        ' GROUP BY staff_name', parameters).fetchall())
 
     return DocumentCounts(
         by_staff_department=by_staff_department,
@@ -118,7 +127,6 @@ def count_documents(connection: sqlite3.Connection, start_date: date, end_date: 
         total=sum(by_staff_department.values()),
         first_date=date.fromisoformat(first_date),
         last_date=date.fromisoformat(last_date),
-        opinion_by_staff=opinion_by_staff,
     )
 
 
@@ -133,10 +141,12 @@ def months_between(start_date: date, end_date: date) -> list[str]:
 
 
 def count_staff_documents(connection: sqlite3.Connection, staff_name: str, start_date: date, end_date: date,
-                          document_limit: int | None = None) -> StaffCounts:
-    """1 人の担当者について、診療科別・文書名別(多い順。document_limit が None なら全件)・月別の件数を数える"""
+                          document_limit: int | None = None,
+                          document_type: DocumentType = DocumentType.ALL) -> StaffCounts:
+    """1 人の担当者について、集計対象の文書の診療科別・文書名別(多い順。document_limit が None なら全件)・
+    月別の件数を数える"""
     parameters = (staff_name, *period_parameters(start_date, end_date))
-    condition = f'staff_name = ? AND {PERIOD_CONDITION}'
+    condition = f'staff_name = ? AND {PERIOD_CONDITION}' + document_type_condition(document_type)
     by_department = connection.execute(
         f'SELECT department, COUNT(*) AS count FROM documents WHERE {condition}'
         ' GROUP BY department ORDER BY count DESC, department', parameters).fetchall()
@@ -148,22 +158,24 @@ def count_staff_documents(connection: sqlite3.Connection, staff_name: str, start
     month_counts = dict(connection.execute(
         f"SELECT strftime('%Y/%m', received_date), COUNT(*) FROM documents WHERE {condition}"
         ' GROUP BY 1', parameters).fetchall())
-    opinion_count = connection.execute(
-        f'SELECT COUNT(*) FROM documents WHERE {condition} AND {OPINION_CONDITION}', parameters).fetchone()[0]
 
-    # 主治医意見書は診療科の件数にも含まれるため、合計に足さないよう後から並べる
     return StaffCounts(
         staff_name=staff_name,
         total=sum(count for _, count in by_department),
-        by_department=by_department + ([(OPINION_LABEL, opinion_count)] if opinion_count else []),
+        by_department=by_department,
         by_document=by_document,
         by_month=[(month, month_counts.get(month, 0)) for month in months_between(start_date, end_date)],
+        document_type=document_type,
     )
 
 
-def trend_subject(department: str, staff_name: str | None) -> str:
-    """推移の表題に出す対象。担当者を選んでいれば氏名を前に付ける"""
-    return f'{staff_name} {department}' if staff_name else department
+def trend_subject(document_filter: DocumentFilter, staff_name: str | None) -> str:
+    """推移の表題に出す対象。「集計対象 診療科」で、診療科を絞っていなければ集計対象だけ。
+    担当者を選んでいれば氏名を前に付ける"""
+    subject = document_filter.document_type.value
+    if document_filter.department is not None:
+        subject += f' {document_filter.department}'
+    return f'{staff_name} {subject}' if staff_name else subject
 
 
 def count_trend(connection: sqlite3.Connection, document_filter: DocumentFilter, start_date: date, end_date: date,
@@ -175,8 +187,7 @@ def count_trend(connection: sqlite3.Connection, document_filter: DocumentFilter,
     if document_filter.department is not None:
         condition += ' AND department = ?'
         parameters.append(document_filter.department)
-    if document_filter.opinion_only:
-        condition += f' AND {OPINION_CONDITION}'
+    condition += document_type_condition(document_filter.document_type)
     if staff_name is not None:
         condition += ' AND staff_name = ?'
         parameters.append(staff_name)

@@ -31,13 +31,14 @@ def save_results(summary: OverallSummary, template_path: str, output_dir: str) -
     assert sheet is not None
 
     counts = summary.counts
-    sheet['A1'] = (f'医療文書作成件数 {counts.first_date:%Y年%m月%d日}'
+    document_type = summary.document_type.value
+    sheet['A1'] = (f'医療文書作成件数 {document_type} {counts.first_date:%Y年%m月%d日}'
                    f'-{counts.last_date:%Y年%m月%d日}')
     write_counts(sheet, summary)
     set_print_layout(sheet)
 
     return save_workbook(wb, output_dir,
-                         f'医療文書作成件数{counts.first_date:%Y%m%d}-{counts.last_date:%Y%m%d}.xlsx')
+                         f'医療文書作成件数_{document_type}_{counts.first_date:%Y%m%d}-{counts.last_date:%Y%m%d}.xlsx')
 
 
 def save_workbook(wb: Workbook, output_dir: str, file_name: str) -> str:
@@ -87,7 +88,8 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
     sheet = cast(Worksheet, wb.active)
     sheet.title = '個人'
     name = staff_counts.staff_name
-    sheet['A1'] = f'医療文書作成件数 {name} {start_date:%Y年%m月%d日}-{end_date:%Y年%m月%d日}'
+    document_type = staff_counts.document_type.value
+    sheet['A1'] = f'医療文書作成件数 {name} {document_type} {start_date:%Y年%m月%d日}-{end_date:%Y年%m月%d日}'
     sheet['A1'].font = Font(bold=True, size=14)
     sheet['A2'] = TOTAL_LABEL
     sheet['B2'] = staff_counts.total
@@ -98,7 +100,7 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
     for column, width in (('A', 14), ('D', 48), ('G', 10)):
         sheet.column_dimensions[column].width = width
 
-    chart = make_line_chart(f'{name} 月別件数')
+    chart = make_line_chart(f'{name} {document_type} 月別件数')
     chart.legend = None
     chart.add_data(Reference(sheet, min_col=8, min_row=4, max_row=4 + len(staff_counts.by_month)),
                    titles_from_data=True)
@@ -108,13 +110,13 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
     set_print_layout(sheet)
 
     return save_workbook(wb, output_dir,
-                         f'医療文書作成件数_{name}_{start_date:%Y%m%d}-{end_date:%Y%m%d}.xlsx')
+                         f'医療文書作成件数_{name}_{document_type}_{start_date:%Y%m%d}-{end_date:%Y%m%d}.xlsx')
 
 
 def save_trend_results(trend: TrendCounts, subject: str, start_date: date, end_date: date,
                        output_dir: str) -> str:
     """年(年度)ごとの月別件数の表と、1 年 1 本の折れ線グラフを新しいブックに書いて保存する。
-    subject は診療科(個人推移なら「氏名 診療科」)"""
+    subject は「集計対象 診療科」(個人推移なら前に氏名)"""
     wb = Workbook()
     sheet = cast(Worksheet, wb.active)
     sheet.title = '推移'
