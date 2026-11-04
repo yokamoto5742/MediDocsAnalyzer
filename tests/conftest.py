@@ -18,7 +18,6 @@ source_dir = {tmp_path}
 database_path = {tmp_path / 'database.db'}
 legacy_database_path = {tmp_path / 'legacy.xlsx'}
 backup_dir = {tmp_path / 'backup'}
-template_path = {tmp_path / 'template.xlsx'}
 output_dir = {tmp_path / 'output'}
 
 [Backup]

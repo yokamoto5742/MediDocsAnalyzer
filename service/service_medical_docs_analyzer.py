@@ -189,6 +189,5 @@ class MedicalDocsAnalyzer:
     def run_analysis(self, start_date: date, end_date: date,
                      document_type: DocumentType = DocumentType.ALL) -> str:
         """期間内で集計対象の文書を集計して Excel に保存し、保存先のパスを返す"""
-        paths_config = load_config()['PATHS']
         summary = self.overall_summary(start_date, end_date, document_type)
-        return save_results(summary, paths_config['template_path'], paths_config['output_dir'])
+        return save_results(summary, load_config()['PATHS']['output_dir'])

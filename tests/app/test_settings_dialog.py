@@ -16,7 +16,7 @@ def dialog(config_path: Path, root: tk.Tk) -> SettingsDialog:
 
 def test_init_shows_saved_paths(dialog: SettingsDialog, config_path: Path) -> None:
     assert list(dialog.path_vars) == ['source_dir', 'database_path', 'legacy_database_path', 'backup_dir',
-                                      'template_path', 'output_dir']
+                                      'output_dir']
     assert dialog.path_vars['database_path'].get() == str(config_path.parent / 'database.db')
 
 
@@ -30,9 +30,9 @@ def test_choose_database_allows_new_file(dialog: SettingsDialog) -> None:
 
 def test_choose_file_converts_slashes(dialog: SettingsDialog) -> None:
     with patch('app.settings_dialog.filedialog.askopenfilename', return_value='C:/data/元データ.xlsm'):
-        dialog._choose_file('template_path')
+        dialog._choose_file('legacy_database_path')
 
-    assert dialog.path_vars['template_path'].get() == 'C:\\data\\元データ.xlsm'
+    assert dialog.path_vars['legacy_database_path'].get() == 'C:\\data\\元データ.xlsm'
 
 
 def test_init_uses_default_source_dir_for_old_config(config_path: Path, root: tk.Tk) -> None:

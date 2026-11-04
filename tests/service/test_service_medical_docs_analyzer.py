@@ -159,7 +159,6 @@ def test_backup_database(config_path: Path) -> None:
 
 def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
-    Workbook().save(tmp_path / 'template.xlsx')
     make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/03/31', 1, '対象外', '診断書', '内科', '佐藤', None, '2025/04/01', '植田'],
         ['2025/04/01', 2, '山田', '診断書', '内科', '佐藤', None, '2025/04/02', '植田'],
@@ -184,7 +183,6 @@ def test_run_analysis(config_path: Path, make_workbook: MakeWorkbook) -> None:
 
 def test_run_analysis_uses_masters(config_path: Path, make_workbook: MakeWorkbook) -> None:
     tmp_path = config_path.parent
-    Workbook().save(tmp_path / 'template.xlsx')
     make_workbook(tmp_path / SOURCE_FILE_NAME, [
         ['2025/04/01', 1, '山田', '診断書', '眼科', '佐藤', None, '2025/04/02', '植田'],
     ])

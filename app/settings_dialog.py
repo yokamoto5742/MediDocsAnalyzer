@@ -38,7 +38,6 @@ class SettingsDialog:
             ('database_path', constants.DATABASE_FILE_LABEL, self._choose_database),
             ('legacy_database_path', constants.LEGACY_DATABASE_FILE_LABEL, self._choose_file),
             ('backup_dir', constants.BACKUP_DIR_LABEL, self._choose_directory),
-            ('template_path', constants.TEMPLATE_FILE_LABEL, self._choose_file),
             ('output_dir', constants.OUTPUT_DIR_LABEL, self._choose_directory),
         ]
         self.path_vars = {key: tk.StringVar(value=config['PATHS'].get(key, PATH_DEFAULTS.get(key, '')))

@@ -180,13 +180,14 @@ class MedicalDocsAnalyzerGUI:
             return DocumentType.ALL
 
     def _setup_document_type_frame(self, parent: ttk.Frame) -> None:
-        """集計対象の選択欄。選んだ値は「集計開始」を押したときに確定する"""
+        """集計対象の選択欄。選び直すとすぐに集計し直す"""
         document_type_frame = ttk.LabelFrame(parent, text=constants.DOCUMENT_TYPE_LABEL, padding="5")
         document_type_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
         self.document_type_var = tk.StringVar(value=self.document_type.value)
-        ttk.Combobox(document_type_frame, width=12, state='readonly', textvariable=self.document_type_var,
-                     values=[document_type.value for document_type in DocumentType]).grid(
-            row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        combobox = ttk.Combobox(document_type_frame, width=12, state='readonly', textvariable=self.document_type_var,
+                                values=[document_type.value for document_type in DocumentType])
+        combobox.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        combobox.bind('<<ComboboxSelected>>', self.change_document_type)
 
     def _setup_buttons(self, parent: ttk.Frame) -> None:
         ttk.Button(parent, text=constants.START_ANALYSIS_BUTTON_LABEL, command=self.start_analysis).grid(
@@ -263,15 +264,25 @@ class MedicalDocsAnalyzerGUI:
         if plan is None:
             return
         self.refresh_overview(plan.source.drafts)
+        self._show_analysis(start_date, end_date, save_settings=True)
 
+    def change_document_type(self, _event: tk.Event | None = None) -> None:
+        """集計対象を選び直したら、元データは取り込まずに DB から推移と、集計済みなら全体・個人を集計し直す"""
         document_type = DocumentType(self.document_type_var.get())
-        if document_type != self.document_type:
-            self.document_type = document_type
-            self.refresh_trends()
+        if document_type == self.document_type:
+            return
+        self.document_type = document_type
+        update_config({'Analysis': {'document_type': document_type.value}})
+        self.refresh_trends()
+        if self.period is not None:
+            self._show_analysis(*self.period)
 
+    def _show_analysis(self, start_date: date, end_date: date, save_settings: bool = False) -> None:
+        """期間内で集計対象の文書を DB から集計し、全体と個人を表示する。save_settings なら期間も保存する"""
         try:
-            self._save_analysis_settings(start_date, end_date)
-            summary = self.analyzer.overall_summary(start_date, end_date, document_type)
+            if save_settings:
+                self._save_analysis_settings(start_date, end_date)
+            summary = self.analyzer.overall_summary(start_date, end_date, self.document_type)
         except NoDataError:
             messagebox.showerror(constants.ERROR_TITLE, constants.NO_DATA_MESSAGE)
             return

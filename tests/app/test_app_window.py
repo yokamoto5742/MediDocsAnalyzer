@@ -290,28 +290,52 @@ def test_init_restores_saved_document_type(config_path: Path, root: tk.Tk, saved
     assert analyzer_class.return_value.trend_summary.call_args.args[0].document_type == expected
 
 
-def test_start_analysis_applies_selected_document_type(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                                       open_folder_of: MagicMock) -> None:
+def test_change_document_type_reanalyzes_without_import(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                                        open_folder_of: MagicMock) -> None:
     analyzer.prepare_source_import.return_value = make_plan([])
     analyzer.overall_summary.return_value = make_summary()
     analyzer.staff_summary.return_value = make_staff_counts('植田')
-    gui.document_type_var.set('医療文書')
-    # 「集計開始」を押すまでは確定しない
-    assert gui.document_type == DocumentType.ALL
-    analyzer.trend_summary.reset_mock()
-
     gui.start_analysis()
+    for mock in (analyzer.prepare_source_import, analyzer.overall_summary, analyzer.staff_summary,
+                 analyzer.trend_summary):
+        mock.reset_mock()
+
+    gui.document_type_var.set('医療文書')
+    gui.change_document_type()
     gui.export_overall()
     gui.export_staff()
 
     assert gui.document_type == DocumentType.MEDICAL
+    analyzer.prepare_source_import.assert_not_called()
     analyzer.overall_summary.assert_called_once_with(date(2025, 4, 1), date(2025, 6, 30), DocumentType.MEDICAL)
+    analyzer.staff_summary.assert_called_once_with('植田', date(2025, 4, 1), date(2025, 6, 30),
+                                                   document_type=DocumentType.MEDICAL)
     analyzer.run_analysis.assert_called_once_with(date(2025, 4, 1), date(2025, 6, 30), DocumentType.MEDICAL)
     analyzer.export_staff.assert_called_once_with('植田', date(2025, 4, 1), date(2025, 6, 30), DocumentType.MEDICAL)
     # 全体推移と個人推移も集計し直す
     assert [call.args[0] for call in analyzer.trend_summary.call_args_list] == [
         DocumentFilter(document_type=DocumentType.MEDICAL)] * 2
     assert load_config()['Analysis']['document_type'] == '医療文書'
+
+
+def test_change_document_type_before_analysis_refreshes_only_trends(gui: MedicalDocsAnalyzerGUI,
+                                                                   analyzer: MagicMock) -> None:
+    analyzer.trend_summary.reset_mock()
+
+    gui.document_type_var.set('主治医意見書')
+    gui.change_document_type()
+
+    analyzer.overall_summary.assert_not_called()
+    assert analyzer.trend_summary.call_count == 2
+    assert load_config()['Analysis']['document_type'] == '主治医意見書'
+
+
+def test_change_document_type_ignores_same_selection(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
+    analyzer.trend_summary.reset_mock()
+
+    gui.change_document_type()
+
+    analyzer.trend_summary.assert_not_called()
 
 
 @pytest.mark.parametrize(('start', 'end', 'expected_message'), [

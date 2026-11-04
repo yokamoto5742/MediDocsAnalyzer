@@ -2,11 +2,12 @@ from datetime import date
 from pathlib import Path
 from typing import cast
 
-from openpyxl import Workbook, load_workbook
-from openpyxl.chart import LineChart, Reference
+from openpyxl import Workbook
+from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.title import title_maker
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Border, Font, Side
+from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -15,26 +16,70 @@ from service.service_data_analyzer import TOTAL_LABEL, OverallSummary, StaffCoun
 TREND_CORNER_LABEL = '件数'
 
 
+OVERALL_FONT_NAME = 'ＭＳ Ｐゴシック'
+OVERALL_ROW_HEIGHT = 19.2
+THIN_SIDE = Side(style='thin')
+THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
+OVERALL_CHART_HEIGHT = 14
+# 高さ 14cm のグラフが占める、既定の高さ(15pt)の行数
+OVERALL_CHART_ROWS = 27
+
+
 def write_counts(sheet: Worksheet, summary: OverallSummary) -> None:
-    """2 行目に見出し、3 行目から担当者ごとの件数と合計行を入れる"""
-    for column_index, header in enumerate(['氏名', TOTAL_LABEL, *summary.departments], start=1):
-        sheet.cell(row=2, column=column_index, value=header)
-    for row_index, row in enumerate(summary.rows, start=3):
+    """2 行目に見出し、3 行目から担当者ごとの件数と合計行を入れ、罫線で囲んで中央に揃える"""
+    table = [['氏名', TOTAL_LABEL, *summary.departments], *summary.rows]
+    for row_index, row in enumerate(table, start=2):
+        sheet.row_dimensions[row_index].height = OVERALL_ROW_HEIGHT
         for column_index, value in enumerate(row, start=1):
-            sheet.cell(row=row_index, column=column_index, value=value)
+            cell = sheet.cell(row=row_index, column=column_index, value=value)
+            cell.font = Font(name=OVERALL_FONT_NAME, size=11)
+            cell.border = THIN_BORDER
+            cell.alignment = Alignment(horizontal='center')
 
 
-def save_results(summary: OverallSummary, template_path: str, output_dir: str) -> str:
-    """集計結果をテンプレートに書いて保存し、保存先のパスを返す"""
-    wb = load_workbook(template_path)
-    sheet = wb.active
-    assert sheet is not None
+def add_overall_chart(sheet: Worksheet, summary: OverallSummary, title: str, anchor: str) -> None:
+    """担当者ごとの件数を診療科で色分けした積み上げ横棒グラフ(全体タブの図と同じ)を置く"""
+    chart = BarChart()
+    chart.type = 'bar'
+    chart.grouping = 'stacked'
+    # 積み上げるには系列を 100% 重ねる
+    chart.overlap = 100
+    set_chart_frame(chart, title)
+    # 合計行を除いた担当者の行と、合計列を除いた診療科の列を使う
+    last_staff_row = 2 + len(summary.staff_members)
+    chart.add_data(Reference(sheet, min_col=3, max_col=2 + len(summary.departments), min_row=2,
+                             max_row=last_staff_row), titles_from_data=True)
+    chart.set_categories(Reference(sheet, min_col=1, min_row=3, max_row=last_staff_row))
+    # 上から表と同じ順に並べる
+    chart.x_axis.scaling.orientation = 'maxMin'
+    chart.height = OVERALL_CHART_HEIGHT
+    assert chart.legend is not None
+    chart.legend.position = 'r'
+    chart.legend.overlay = False
+    sheet.add_chart(chart, anchor)
+
+
+def save_results(summary: OverallSummary, output_dir: str) -> str:
+    """集計結果の表と積み上げ横棒グラフを新しいブックに書いて保存し、保存先のパスを返す"""
+    wb = Workbook()
+    sheet = cast(Worksheet, wb.active)
+    sheet.title = '一覧'
 
     counts = summary.counts
     document_type = summary.document_type.value
-    sheet['A1'] = (f'医療文書作成件数 {document_type} {counts.first_date:%Y年%m月%d日}'
-                   f'-{counts.last_date:%Y年%m月%d日}')
+    title = (f'医療文書作成件数 {document_type} {counts.first_date:%Y年%m月%d日}'
+             f'-{counts.last_date:%Y年%m月%d日}')
+    sheet['A1'] = title
+    sheet['A1'].font = Font(name=OVERALL_FONT_NAME, size=12, bold=True)
+    sheet.row_dimensions[1].height = 20.4
+    sheet.column_dimensions['A'].width = 10.66
     write_counts(sheet, summary)
+    sheet.freeze_panes = 'B3'
+
+    chart_row = len(summary.rows) + 4
+    add_overall_chart(sheet, summary, f'{document_type} 担当者別件数', f'A{chart_row}')
+    last_column = get_column_letter(max(2 + len(summary.departments), 12))
+    sheet.print_area = f'A1:{last_column}{chart_row + OVERALL_CHART_ROWS}'
     set_print_layout(sheet)
 
     return save_workbook(wb, output_dir,
@@ -59,8 +104,8 @@ def set_print_layout(sheet: Worksheet) -> None:
     sheet.page_setup.fitToHeight = 1
 
 
-def make_line_chart(title: str) -> LineChart:
-    chart = LineChart()
+def set_chart_frame(chart: BarChart | LineChart, title: str) -> None:
+    """タイトル・大きさ・軸の表示をそろえる"""
     # overlay を明示しないと、Excel はタイトルをグラフに重ねて表示する
     chart_title = title_maker(title)
     chart_title.overlay = False
@@ -70,6 +115,11 @@ def make_line_chart(title: str) -> LineChart:
     # openpyxl 3.1 は軸を既定で隠すため、明示的に表示する
     chart.x_axis.delete = False
     chart.y_axis.delete = False
+
+
+def make_line_chart(title: str) -> LineChart:
+    chart = LineChart()
+    set_chart_frame(chart, title)
     return chart
 
 

@@ -1,7 +1,7 @@
 from datetime import date
 from pathlib import Path
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from service.service_data_analyzer import DocumentCounts, DocumentType, OverallSummary, StaffCounts, TrendCounts
@@ -24,8 +24,6 @@ def sheet_values(sheet: Worksheet) -> list[list[object]]:
 
 
 def test_save_results(tmp_path: Path) -> None:
-    template_path = tmp_path / 'template.xlsx'
-    Workbook().save(template_path)
     counts = DocumentCounts(
         by_staff_department={('植田', '内科'): 2, ('花﨑', '外科'): 1, ('外部', '内科'): 1, ('植田', '眼科'): 5},
         by_department={'内科': 3, '外科': 1, '眼科': 5},
@@ -35,19 +33,30 @@ def test_save_results(tmp_path: Path) -> None:
     )
 
     output_path = save_results(OverallSummary(counts, ['植田', '花﨑'], ['内科', '外科'], DocumentType.MEDICAL),
-                               str(template_path), str(tmp_path / 'output'))
+                               str(tmp_path / 'output'))
 
     assert Path(output_path) == tmp_path / 'output' / '医療文書作成件数_医療文書_20250401-20250520.xlsx'
-    assert sheet_values(active_sheet(output_path)) == [
+    sheet = active_sheet(output_path)
+    assert sheet.title == '一覧'
+    assert sheet_values(sheet) == [
         ['医療文書作成件数 医療文書 2025年04月01日-2025年05月20日', None, None, None],
         ['氏名', '合計', '内科', '外科'],
         ['植田', 2, 2, 0],
         ['花﨑', 1, 0, 1],
         ['合計', 9, 3, 1],
     ]
-    sheet = active_sheet(output_path)
-    assert getattr(sheet, '_charts') == []
+    assert sheet['A1'].font.b
+    assert sheet['D5'].border.left.style == 'thin'
+    assert sheet['D5'].alignment.horizontal == 'center'
+    assert sheet.freeze_panes == 'B3'
     assert sheet.page_setup.orientation == 'landscape'
+    assert sheet.print_area == "'一覧'!$A$1:$L$34"
+    assert chart_types(sheet) == ['barChart']
+    chart = getattr(sheet, '_charts')[0]
+    assert (chart.type, chart.grouping, chart.overlap) == ('bar', 'stacked', 100)
+    # 系列は合計列を除いた診療科、分類は合計行を除いた担当者
+    assert [series.tx.strRef.f for series in chart.series] == ["'一覧'!C2", "'一覧'!D2"]
+    assert chart.series[0].cat.numRef.f == "'一覧'!$A$3:$A$4"
 
 
 def test_save_staff_results(tmp_path: Path) -> None:
