@@ -72,7 +72,8 @@ def add_overall_chart(sheet: Worksheet, summary: OverallSummary, title: str, cha
     # 表と同じ列の幅に、決まった行数の高さで貼り付ける(印刷範囲がグラフの端でちょうど終わる)
     for row in range(chart_row, chart_row + OVERALL_CHART_ROW_COUNT):
         sheet.row_dimensions[row].height = TABLE_ROW_HEIGHT
-    chart.anchor = TwoCellAnchor(
+    # openpyxl は TwoCellAnchor を受け付けるが、型定義(typeshed)は str だけにしている
+    chart.anchor = TwoCellAnchor(  # pyright: ignore[reportAttributeAccessIssue]
         _from=AnchorMarker(col=0, row=chart_row - 1),
         to=AnchorMarker(col=2 + len(summary.departments), row=chart_row - 1 + OVERALL_CHART_ROW_COUNT))
     sheet.add_chart(chart)
