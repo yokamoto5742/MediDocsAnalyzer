@@ -169,7 +169,9 @@ def write_table_row(sheet: Worksheet, row: int, column: int, values: list[str | 
     """表の 1 行分を表の文字の大きさで書き、文字が切れないよう行の高さを広げる"""
     sheet.row_dimensions[row].height = TABLE_ROW_HEIGHT
     for offset, value in enumerate(values):
-        sheet.cell(row=row, column=column + offset, value=value).font = Font(bold=bold, size=TABLE_FONT_SIZE)
+        cell = sheet.cell(row=row, column=column + offset, value=value)
+        cell.font = Font(bold=bold, size=TABLE_FONT_SIZE)
+        cell.border = THIN_BORDER
 
 
 def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: date, output_dir: str) -> str:
