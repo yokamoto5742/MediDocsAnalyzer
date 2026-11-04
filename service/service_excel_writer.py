@@ -6,6 +6,7 @@ from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.title import title_maker
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
@@ -20,10 +21,12 @@ OVERALL_FONT_NAME = 'ＭＳ Ｐゴシック'
 OVERALL_ROW_HEIGHT = 19.2
 THIN_SIDE = Side(style='thin')
 THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
-OVERALL_CHART_HEIGHT = 14
+OVERALL_CHART_ROW_COUNT = 21
 OVERALL_MIN_COLUMN_WIDTH = 8
-DEFAULT_ROW_HEIGHT = 15
-POINTS_PER_CM = 72 / 2.54
+# Excel(既定のフォント)で印刷したときに列幅 1 文字分が何 pt になるかの実測値(画面上の 5.4 pt より広く印刷される)
+COLUMN_WIDTH_POINTS = 5.94
+# 何も設定しない行の高さ(pt)の実測値
+DEFAULT_ROW_HEIGHT = 13.2
 A4_LONG_SIDE_INCH = 11.69
 A4_SHORT_SIDE_INCH = 8.27
 
@@ -60,23 +63,30 @@ def add_overall_chart(sheet: Worksheet, summary: OverallSummary, title: str, cha
     chart.set_categories(Reference(sheet, min_col=1, min_row=3, max_row=last_staff_row))
     # 上から表と同じ順に並べる
     chart.x_axis.scaling.orientation = 'maxMin'
-    chart.height = OVERALL_CHART_HEIGHT
-    chart.width = landscape_chart_width(sheet, chart_row)
     assert chart.legend is not None
     chart.legend.position = 'r'
     chart.legend.overlay = False
-    sheet.add_chart(chart, f'A{chart_row}')
+    # 表と同じ列の幅に、決まった行数の高さで貼り付ける(印刷範囲がグラフの端でちょうど終わる)
+    for row in range(chart_row, chart_row + OVERALL_CHART_ROW_COUNT):
+        sheet.row_dimensions[row].height = OVERALL_ROW_HEIGHT
+    chart.anchor = TwoCellAnchor(
+        _from=AnchorMarker(col=0, row=chart_row - 1),
+        to=AnchorMarker(col=2 + len(summary.departments), row=chart_row - 1 + OVERALL_CHART_ROW_COUNT))
+    sheet.add_chart(chart)
 
 
-def landscape_chart_width(sheet: Worksheet, chart_row: int) -> int:
-    """表とグラフを合わせた形が A4 横の印刷範囲と同じ縦横比になるグラフの幅(cm)を返す。
+def fit_columns_to_page(sheet: Worksheet, column_count: int, last_row: int) -> None:
+    """表とグラフを合わせた形が A4 横の印刷範囲と同じ縦横比になるよう、列幅を同じ割合で広げる。
     縦長のままだと 1 枚に縮めたときに右側が空くため"""
     margins = sheet.page_margins
     page_ratio = ((A4_LONG_SIDE_INCH - margins.left - margins.right)
                   / (A4_SHORT_SIDE_INCH - margins.top - margins.bottom))
-    rows_height = sum(sheet.row_dimensions[row].height or DEFAULT_ROW_HEIGHT for row in range(1, chart_row))
-    content_height = rows_height / POINTS_PER_CM + OVERALL_CHART_HEIGHT
-    return round(content_height * page_ratio)
+    content_height = sum(sheet.row_dimensions[row].height or DEFAULT_ROW_HEIGHT for row in range(1, last_row + 1))
+    letters = [get_column_letter(column) for column in range(1, column_count + 1)]
+    widths = [sheet.column_dimensions[letter].width for letter in letters]
+    scale = max(1.0, content_height * page_ratio / (sum(widths) * COLUMN_WIDTH_POINTS))
+    for letter, width in zip(letters, widths):
+        sheet.column_dimensions[letter].width = width * scale
 
 
 def save_results(summary: OverallSummary, output_dir: str) -> str:
@@ -98,6 +108,7 @@ def save_results(summary: OverallSummary, output_dir: str) -> str:
 
     chart_row = len(summary.rows) + 4
     add_overall_chart(sheet, summary, f'{document_type} 担当者別件数', chart_row)
+    fit_columns_to_page(sheet, 2 + len(summary.departments), chart_row + OVERALL_CHART_ROW_COUNT - 1)
     # 印刷範囲は指定しない(Excel はグラフまで含めて印刷し、A4 横 1 枚に縮める)
     set_print_layout(sheet)
 

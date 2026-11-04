@@ -5,7 +5,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from service.service_data_analyzer import DocumentCounts, DocumentType, OverallSummary, StaffCounts, TrendCounts
-from service.service_excel_writer import landscape_chart_width, save_results, save_staff_results, save_trend_results
+from service.service_excel_writer import fit_columns_to_page, save_results, save_staff_results, save_trend_results
 
 TITLE = '医療文書作成件数'
 STAFF_NAME = '花﨑'
@@ -52,9 +52,10 @@ def test_save_results(tmp_path: Path) -> None:
     assert sheet.page_setup.orientation == 'landscape'
     assert not sheet.print_area
     assert sheet.page_setup.fitToHeight == 1
-    assert sheet.column_dimensions['C'].width == 8
     assert chart_types(sheet) == ['barChart']
     chart = getattr(sheet, '_charts')[0]
+    # グラフは表と同じ列(A〜D)の幅いっぱいに貼る
+    assert (chart.anchor._from.col, chart.anchor.to.col) == (0, 4)
     assert (chart.type, chart.grouping, chart.overlap) == ('bar', 'stacked', 100)
     # 系列は合計列を除いた診療科、分類は合計行を除いた担当者
     assert [series.tx.strRef.f for series in chart.series] == ["'一覧'!C2", "'一覧'!D2"]
@@ -107,14 +108,27 @@ def test_save_trend_results(tmp_path: Path) -> None:
     assert [cell.value for cell in chart_sheet[2]][:4] == ['2025年度', 2, None, 2]
 
 
-def test_landscape_chart_width_matches_a4_landscape_ratio() -> None:
+def test_fit_columns_to_page_widens_columns_to_a4_landscape_ratio() -> None:
     sheet = Workbook().create_sheet()
-    sheet.row_dimensions[1].height = 20
+    sheet.row_dimensions[1].height = 300
+    sheet.column_dimensions['A'].width = 10
+    sheet.column_dimensions['B'].width = 20
 
-    width = landscape_chart_width(sheet, 3)
+    fit_columns_to_page(sheet, 2, 2)
 
-    # �����ϰ�(A4 ������;����������ʬ)��Ʊ���Ĳ���ˤʤ�
+    # 印刷範囲(A4 横から余白を除いた部分)と同じ縦横比になるよう、同じ割合で広げる
     margins = sheet.page_margins
     page_ratio = (11.69 - margins.left - margins.right) / (8.27 - margins.top - margins.bottom)
-    content_height = (20 + 15) / (72 / 2.54) + 14
-    assert width == round(content_height * page_ratio)
+    width_a = sheet.column_dimensions['A'].width
+    width_b = sheet.column_dimensions['B'].width
+    assert abs((width_a + width_b) * 5.94 - (300 + 13.2) * page_ratio) < 1e-6
+    assert abs(width_b - width_a * 2) < 1e-6
+
+
+def test_fit_columns_to_page_keeps_wide_table() -> None:
+    sheet = Workbook().create_sheet()
+    sheet.column_dimensions['A'].width = 500
+
+    fit_columns_to_page(sheet, 1, 1)
+
+    assert sheet.column_dimensions['A'].width == 500
