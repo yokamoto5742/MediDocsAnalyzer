@@ -46,6 +46,7 @@ def test_save_results(tmp_path: Path) -> None:
         ['合計', 9, 3, 1],
     ]
     assert sheet['A1'].font.b
+    assert (sheet['A2'].font.sz, sheet['D5'].font.sz) == (14, 14)
     assert sheet['D5'].border.left.style == 'thin'
     assert sheet['D5'].alignment.horizontal == 'center'
     assert sheet.freeze_panes == 'B3'
@@ -76,6 +77,7 @@ def test_save_staff_results(tmp_path: Path) -> None:
     values = sheet_values(sheet)
     assert values[4][:8] == [DEPARTMENT, 3, None, DOCUMENT, 3, None, '2025/04', 2]
     assert values[5][6:8] == ['2025/05', 1]
+    assert (sheet['A2'].font.sz, sheet['D4'].font.sz, sheet['H6'].font.sz) == (14, 14, 14)
     assert chart_types(sheet) == ['lineChart']
 
 
@@ -97,6 +99,7 @@ def test_save_trend_results(tmp_path: Path) -> None:
                          '3月', '合計']
     assert values[3:6] == [['2024年度', *[1] * 12, 12], ['2025年度', 2, 0, *[2] * 10, 22],
                            ['2026年度', 3, *[None] * 11, 3]]
+    assert (sheet['A3'].font.sz, sheet['N6'].font.sz) == (14, 14)
     assert chart_types(sheet) == ['lineChart']
     chart = getattr(sheet, '_charts')[0]
     assert [series.marker.symbol for series in chart.series] == ['circle'] * 3

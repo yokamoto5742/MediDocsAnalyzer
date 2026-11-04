@@ -18,11 +18,14 @@ TREND_CORNER_LABEL = '件数'
 
 
 OVERALL_FONT_NAME = 'ＭＳ Ｐゴシック'
-OVERALL_ROW_HEIGHT = 19.2
+TABLE_FONT_SIZE = 14
+TITLE_FONT_SIZE = 16
+TABLE_ROW_HEIGHT = 21.6
+TITLE_ROW_HEIGHT = 24
 THIN_SIDE = Side(style='thin')
 THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
 OVERALL_CHART_ROW_COUNT = 21
-OVERALL_MIN_COLUMN_WIDTH = 8
+OVERALL_MIN_COLUMN_WIDTH = 10
 # Excel(既定のフォント)で印刷したときに列幅 1 文字分が何 pt になるかの実測値(画面上の 5.4 pt より広く印刷される)
 COLUMN_WIDTH_POINTS = 5.94
 # 何も設定しない行の高さ(pt)の実測値
@@ -34,16 +37,16 @@ A4_SHORT_SIDE_INCH = 8.27
 def write_counts(sheet: Worksheet, summary: OverallSummary) -> None:
     """2 行目に見出し、3 行目から担当者ごとの件数と合計行を入れ、罫線で囲んで中央に揃える"""
     headers = [TOTAL_LABEL, *summary.departments]
-    # 全角文字は 1 文字で幅 2 を使うため、見出しが切れないよう列幅を広げる
+    # 全角文字は 14pt で 1 文字あたり幅 2.6 ほど使うため、見出しが切れないよう列幅を広げる
     for column_index, header in enumerate(headers, start=2):
-        width = max(OVERALL_MIN_COLUMN_WIDTH, len(header) * 2 + 2)
+        width = max(OVERALL_MIN_COLUMN_WIDTH, len(header) * 2.6 + 2)
         sheet.column_dimensions[get_column_letter(column_index)].width = width
     table = [['氏名', *headers], *summary.rows]
     for row_index, row in enumerate(table, start=2):
-        sheet.row_dimensions[row_index].height = OVERALL_ROW_HEIGHT
+        sheet.row_dimensions[row_index].height = TABLE_ROW_HEIGHT
         for column_index, value in enumerate(row, start=1):
             cell = sheet.cell(row=row_index, column=column_index, value=value)
-            cell.font = Font(name=OVERALL_FONT_NAME, size=11)
+            cell.font = Font(name=OVERALL_FONT_NAME, size=TABLE_FONT_SIZE)
             cell.border = THIN_BORDER
             cell.alignment = Alignment(horizontal='center')
 
@@ -68,7 +71,7 @@ def add_overall_chart(sheet: Worksheet, summary: OverallSummary, title: str, cha
     chart.legend.overlay = False
     # 表と同じ列の幅に、決まった行数の高さで貼り付ける(印刷範囲がグラフの端でちょうど終わる)
     for row in range(chart_row, chart_row + OVERALL_CHART_ROW_COUNT):
-        sheet.row_dimensions[row].height = OVERALL_ROW_HEIGHT
+        sheet.row_dimensions[row].height = TABLE_ROW_HEIGHT
     chart.anchor = TwoCellAnchor(
         _from=AnchorMarker(col=0, row=chart_row - 1),
         to=AnchorMarker(col=2 + len(summary.departments), row=chart_row - 1 + OVERALL_CHART_ROW_COUNT))
@@ -100,9 +103,9 @@ def save_results(summary: OverallSummary, output_dir: str) -> str:
     title = (f'医療文書作成件数 {document_type} {counts.first_date:%Y年%m月%d日}'
              f'-{counts.last_date:%Y年%m月%d日}')
     sheet['A1'] = title
-    sheet['A1'].font = Font(name=OVERALL_FONT_NAME, size=12, bold=True)
-    sheet.row_dimensions[1].height = 20.4
-    sheet.column_dimensions['A'].width = 10.66
+    sheet['A1'].font = Font(name=OVERALL_FONT_NAME, size=TITLE_FONT_SIZE, bold=True)
+    sheet.row_dimensions[1].height = TITLE_ROW_HEIGHT
+    sheet.column_dimensions['A'].width = 14
     write_counts(sheet, summary)
     sheet.freeze_panes = 'B3'
 
@@ -155,11 +158,17 @@ def make_line_chart(title: str) -> LineChart:
 
 def write_table(sheet: Worksheet, row: int, column: int, headers: tuple[str, str],
                 rows: list[tuple[str, int]]) -> None:
-    for offset, value in enumerate(headers):
-        sheet.cell(row=row, column=column + offset, value=value).font = Font(bold=True)
+    write_table_row(sheet, row, column, list(headers), bold=True)
     for row_offset, (label, count) in enumerate(rows, start=1):
-        sheet.cell(row=row + row_offset, column=column, value=label)
-        sheet.cell(row=row + row_offset, column=column + 1, value=count)
+        write_table_row(sheet, row + row_offset, column, [label, count])
+
+
+def write_table_row(sheet: Worksheet, row: int, column: int, values: list[str | int | None],
+                    bold: bool = False) -> None:
+    """表の 1 行分を表の文字の大きさで書き、文字が切れないよう行の高さを広げる"""
+    sheet.row_dimensions[row].height = TABLE_ROW_HEIGHT
+    for offset, value in enumerate(values):
+        sheet.cell(row=row, column=column + offset, value=value).font = Font(bold=bold, size=TABLE_FONT_SIZE)
 
 
 def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: date, output_dir: str) -> str:
@@ -170,14 +179,14 @@ def save_staff_results(staff_counts: StaffCounts, start_date: date, end_date: da
     name = staff_counts.staff_name
     document_type = staff_counts.document_type.value
     sheet['A1'] = f'医療文書作成件数 {name} {document_type} {start_date:%Y年%m月%d日}-{end_date:%Y年%m月%d日}'
-    sheet['A1'].font = Font(bold=True, size=14)
-    sheet['A2'] = TOTAL_LABEL
-    sheet['B2'] = staff_counts.total
+    sheet['A1'].font = Font(bold=True, size=TITLE_FONT_SIZE)
+    sheet.row_dimensions[1].height = TITLE_ROW_HEIGHT
+    write_table_row(sheet, 2, 1, [TOTAL_LABEL, staff_counts.total])
 
     write_table(sheet, 4, 1, ('診療科', '件数'), staff_counts.by_department)
     write_table(sheet, 4, 4, ('文書名', '件数'), staff_counts.by_document)
     write_table(sheet, 4, 7, ('月', '件数'), staff_counts.by_month)
-    for column, width in (('A', 14), ('D', 48), ('G', 10)):
+    for column, width in (('A', 18), ('D', 60), ('G', 13)):
         sheet.column_dimensions[column].width = width
 
     chart = make_line_chart(f'{name} {document_type} 月別件数')
@@ -201,16 +210,14 @@ def save_trend_results(trend: TrendCounts, subject: str, start_date: date, end_d
     sheet = cast(Worksheet, wb.active)
     sheet.title = '推移'
     sheet['A1'] = f'医療文書作成件数推移(医師依頼日) {subject} {start_date:%Y/%m/%d}～{end_date:%Y/%m/%d}'
-    sheet['A1'].font = Font(bold=True, size=14)
+    sheet['A1'].font = Font(bold=True, size=TITLE_FONT_SIZE)
+    sheet.row_dimensions[1].height = TITLE_ROW_HEIGHT
 
-    headers = [TREND_CORNER_LABEL, *trend.month_labels, TOTAL_LABEL]
-    for column_index, header in enumerate(headers, start=1):
-        sheet.cell(row=3, column=column_index, value=header).font = Font(bold=True)
+    write_table_row(sheet, 3, 1, [TREND_CORNER_LABEL, *trend.month_labels, TOTAL_LABEL], bold=True)
     rows = trend.table_rows
     for row_index, row in enumerate(rows, start=4):
-        for column_index, value in enumerate(row, start=1):
-            sheet.cell(row=row_index, column=column_index, value=value)
-    sheet.column_dimensions['A'].width = 12
+        write_table_row(sheet, row_index, 1, row)
+    sheet.column_dimensions['A'].width = 16
 
     # 0 件の月に線を引かないよう、グラフには 0 を空欄にした値を隠しシートに置いて使う
     chart_sheet = wb.create_sheet('グラフ用')
