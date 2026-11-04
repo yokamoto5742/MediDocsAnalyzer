@@ -22,6 +22,10 @@ THIN_SIDE = Side(style='thin')
 THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
 OVERALL_CHART_HEIGHT = 14
 OVERALL_MIN_COLUMN_WIDTH = 8
+DEFAULT_ROW_HEIGHT = 15
+POINTS_PER_CM = 72 / 2.54
+A4_LONG_SIDE_INCH = 11.69
+A4_SHORT_SIDE_INCH = 8.27
 
 
 def write_counts(sheet: Worksheet, summary: OverallSummary) -> None:
@@ -41,7 +45,7 @@ def write_counts(sheet: Worksheet, summary: OverallSummary) -> None:
             cell.alignment = Alignment(horizontal='center')
 
 
-def add_overall_chart(sheet: Worksheet, summary: OverallSummary, title: str, anchor: str) -> None:
+def add_overall_chart(sheet: Worksheet, summary: OverallSummary, title: str, chart_row: int) -> None:
     """担当者ごとの件数を診療科で色分けした積み上げ横棒グラフ(全体タブの図と同じ)を置く"""
     chart = BarChart()
     chart.type = 'bar'
@@ -57,10 +61,22 @@ def add_overall_chart(sheet: Worksheet, summary: OverallSummary, title: str, anc
     # 上から表と同じ順に並べる
     chart.x_axis.scaling.orientation = 'maxMin'
     chart.height = OVERALL_CHART_HEIGHT
+    chart.width = landscape_chart_width(sheet, chart_row)
     assert chart.legend is not None
     chart.legend.position = 'r'
     chart.legend.overlay = False
-    sheet.add_chart(chart, anchor)
+    sheet.add_chart(chart, f'A{chart_row}')
+
+
+def landscape_chart_width(sheet: Worksheet, chart_row: int) -> int:
+    """表とグラフを合わせた形が A4 横の印刷範囲と同じ縦横比になるグラフの幅(cm)を返す。
+    縦長のままだと 1 枚に縮めたときに右側が空くため"""
+    margins = sheet.page_margins
+    page_ratio = ((A4_LONG_SIDE_INCH - margins.left - margins.right)
+                  / (A4_SHORT_SIDE_INCH - margins.top - margins.bottom))
+    rows_height = sum(sheet.row_dimensions[row].height or DEFAULT_ROW_HEIGHT for row in range(1, chart_row))
+    content_height = rows_height / POINTS_PER_CM + OVERALL_CHART_HEIGHT
+    return round(content_height * page_ratio)
 
 
 def save_results(summary: OverallSummary, output_dir: str) -> str:
@@ -81,7 +97,7 @@ def save_results(summary: OverallSummary, output_dir: str) -> str:
     sheet.freeze_panes = 'B3'
 
     chart_row = len(summary.rows) + 4
-    add_overall_chart(sheet, summary, f'{document_type} 担当者別件数', f'A{chart_row}')
+    add_overall_chart(sheet, summary, f'{document_type} 担当者別件数', chart_row)
     # 印刷範囲は指定しない(Excel はグラフまで含めて印刷し、A4 横 1 枚に縮める)
     set_print_layout(sheet)
 

@@ -1,11 +1,11 @@
 from datetime import date
 from pathlib import Path
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from service.service_data_analyzer import DocumentCounts, DocumentType, OverallSummary, StaffCounts, TrendCounts
-from service.service_excel_writer import save_results, save_staff_results, save_trend_results
+from service.service_excel_writer import landscape_chart_width, save_results, save_staff_results, save_trend_results
 
 TITLE = 'åŒ»ç™‚æ–‡æ›¸ä½œæˆä»¶æ•°'
 STAFF_NAME = 'èŠ±ï¨‘'
@@ -105,3 +105,16 @@ def test_save_trend_results(tmp_path: Path) -> None:
     chart_sheet = load_workbook(output_path)['ã‚°ãƒ©ãƒ•ç”¨']
     assert chart_sheet.sheet_state == 'hidden'
     assert [cell.value for cell in chart_sheet[2]][:4] == ['2025å¹´åº¦', 2, None, 2]
+
+
+def test_landscape_chart_width_matches_a4_landscape_ratio() -> None:
+    sheet = Workbook().create_sheet()
+    sheet.row_dimensions[1].height = 20
+
+    width = landscape_chart_width(sheet, 3)
+
+    # °õºþÈÏ°Ï(A4 ²£¤«¤éÍ¾Çò¤ò½ü¤¤¤¿ÉôÊ¬)¤ÈÆ±¤¸½Ä²£Èæ¤Ë¤Ê¤ë
+    margins = sheet.page_margins
+    page_ratio = (11.69 - margins.left - margins.right) / (8.27 - margins.top - margins.bottom)
+    content_height = (20 + 15) / (72 / 2.54) + 14
+    assert width == round(content_height * page_ratio)
