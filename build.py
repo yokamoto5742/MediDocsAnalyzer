@@ -6,6 +6,7 @@ def build_executable():
         "pyinstaller",
         "--name=MediDocsAnalyzer",
         "--windowed",
+        "--icon=assets/MedicalDocsAnalyzer.ico",
         "--add-data", "utils/config.ini;.",
         "main.py"
     ])
