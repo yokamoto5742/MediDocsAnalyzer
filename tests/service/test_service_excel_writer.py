@@ -50,7 +50,9 @@ def test_save_results(tmp_path: Path) -> None:
     assert sheet['D5'].alignment.horizontal == 'center'
     assert sheet.freeze_panes == 'B3'
     assert sheet.page_setup.orientation == 'landscape'
-    assert sheet.print_area == "'一覧'!$A$1:$L$34"
+    assert not sheet.print_area
+    assert sheet.page_setup.fitToHeight == 1
+    assert sheet.column_dimensions['C'].width == 8
     assert chart_types(sheet) == ['barChart']
     chart = getattr(sheet, '_charts')[0]
     assert (chart.type, chart.grouping, chart.overlap) == ('bar', 'stacked', 100)

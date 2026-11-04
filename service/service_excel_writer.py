@@ -21,13 +21,17 @@ OVERALL_ROW_HEIGHT = 19.2
 THIN_SIDE = Side(style='thin')
 THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
 OVERALL_CHART_HEIGHT = 14
-# 高さ 14cm のグラフが占める、既定の高さ(15pt)の行数
-OVERALL_CHART_ROWS = 27
+OVERALL_MIN_COLUMN_WIDTH = 8
 
 
 def write_counts(sheet: Worksheet, summary: OverallSummary) -> None:
     """2 行目に見出し、3 行目から担当者ごとの件数と合計行を入れ、罫線で囲んで中央に揃える"""
-    table = [['氏名', TOTAL_LABEL, *summary.departments], *summary.rows]
+    headers = [TOTAL_LABEL, *summary.departments]
+    # 全角文字は 1 文字で幅 2 を使うため、見出しが切れないよう列幅を広げる
+    for column_index, header in enumerate(headers, start=2):
+        width = max(OVERALL_MIN_COLUMN_WIDTH, len(header) * 2 + 2)
+        sheet.column_dimensions[get_column_letter(column_index)].width = width
+    table = [['氏名', *headers], *summary.rows]
     for row_index, row in enumerate(table, start=2):
         sheet.row_dimensions[row_index].height = OVERALL_ROW_HEIGHT
         for column_index, value in enumerate(row, start=1):
@@ -78,8 +82,7 @@ def save_results(summary: OverallSummary, output_dir: str) -> str:
 
     chart_row = len(summary.rows) + 4
     add_overall_chart(sheet, summary, f'{document_type} 担当者別件数', f'A{chart_row}')
-    last_column = get_column_letter(max(2 + len(summary.departments), 12))
-    sheet.print_area = f'A1:{last_column}{chart_row + OVERALL_CHART_ROWS}'
+    # 印刷範囲は指定しない(Excel はグラフまで含めて印刷し、A4 横 1 枚に縮める)
     set_print_layout(sheet)
 
     return save_workbook(wb, output_dir,
