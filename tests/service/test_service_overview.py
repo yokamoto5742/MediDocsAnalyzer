@@ -3,21 +3,33 @@ from datetime import date
 import pytest
 
 from service.models import Draft
-from service.service_overview import DraftStatus, draft_status, make_overview
+from service.service_overview import DraftStatus, Overview, draft_status, load_overview
+from tests.documents_database import Document, make_documents_connection
 
 
 def make_draft(received: date, requested: date | None = None, staff: str = '') -> Draft:
     return Draft(received, requested, '診断書', '内科', '佐藤', staff, '1')
 
 
-def test_make_overview_keeps_drafts_within_days_newest_first() -> None:
-    drafts = [make_draft(date(2026, 10, 24)), make_draft(date(2026, 10, 25), staff='植田'),
-              make_draft(date(2026, 10, 31), requested=date(2026, 10, 31)), make_draft(date(2026, 11, 1))]
+def test_load_overview_reads_drafts_within_days_newest_first() -> None:
+    connection = make_documents_connection([
+        Document(date(2026, 10, 24), None, '診断書', '内科', '佐藤', None, patient_id=1),
+        Document(date(2026, 10, 25), None, '診断書', '内科', '佐藤', '植田', patient_id=2),
+        Document(date(2026, 10, 31), date(2026, 10, 31), '診断書', '外科', '佐藤', None, patient_id=3),
+        Document(date(2026, 11, 1), None, '診断書', '内科', '佐藤', None, patient_id=4),
+        # 文書(担当者名と医師依頼日がある行)と論理削除した行は出さない
+        Document(date(2026, 10, 30), date(2026, 10, 30), '診断書', '内科', '佐藤', '植田', patient_id=5),
+        Document(date(2026, 10, 30), None, '診断書', '内科', '佐藤', None, patient_id=6, deleted=True),
+    ])
 
-    overview = make_overview(drafts, date(2026, 10, 31), 7)
+    overview = load_overview(connection, date(2026, 10, 31), 7)
 
     assert (overview.start_date, overview.end_date) == (date(2026, 10, 25), date(2026, 10, 31))
-    assert [draft.received_date for draft in overview.drafts] == [date(2026, 10, 31), date(2026, 10, 25)]
+    assert overview.drafts == [
+        Draft(date(2026, 10, 31), date(2026, 10, 31), '診断書', '外科', '佐藤', '', '3'),
+        Draft(date(2026, 10, 25), None, '診断書', '内科', '佐藤', '植田', '2'),
+    ]
+    connection.close()
 
 
 @pytest.mark.parametrize(('requested', 'staff', 'expected'), [
@@ -34,7 +46,7 @@ def test_overview_counts_status_by_department() -> None:
               make_draft(date(2026, 10, 31)),
               Draft(date(2026, 10, 31), date(2026, 10, 31), '診断書', '外科', '佐藤', '', '1')]
 
-    overview = make_overview(drafts, date(2026, 10, 31), 1)
+    overview = Overview(date(2026, 10, 31), date(2026, 10, 31), drafts)
 
     assert overview.status_counts == {DraftStatus.NOT_STARTED: 2, DraftStatus.INCOMPLETE: 1,
                                       DraftStatus.UNASSIGNED: 1}

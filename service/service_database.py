@@ -4,26 +4,13 @@ from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 
-from service.models import Document
-
 BUSY_TIMEOUT_SECONDS = 10
 # スキーマを変えたら上げ、migrate に古い版からの変更を足す
-SCHEMA_VERSION = 1
-# 集計・取り込みの対象にする期間は預り日で決める
+SCHEMA_VERSION = 2
+# 集計の期間は預り日で決める
 PERIOD_CONDITION = 'received_date BETWEEN ? AND ?'
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS documents (
-    id INTEGER PRIMARY KEY,
-    received_date TEXT NOT NULL,
-    requested_date TEXT NOT NULL,
-    document_name TEXT NOT NULL,
-    department TEXT NOT NULL,
-    doctor_name TEXT NOT NULL,
-    staff_name TEXT NOT NULL,
-    patient_id TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_documents_received_date ON documents (received_date);
 CREATE TABLE IF NOT EXISTS staff (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -39,6 +26,13 @@ CREATE TABLE IF NOT EXISTS departments (
     name TEXT PRIMARY KEY,
     display_order INTEGER NOT NULL
 );
+"""
+
+# CSV2XL の DB で集計する文書。論理削除した行と、担当者名か医師依頼日が空の行(下書き)を除く
+VALID_DOCUMENTS_VIEW = """
+CREATE TEMP VIEW IF NOT EXISTS valid_documents AS
+SELECT * FROM documents
+WHERE deleted = 0 AND IFNULL(staff_name, '') <> '' AND IFNULL(requested_date, '') <> ''
 """
 
 
@@ -62,21 +56,15 @@ def migrate(connection: sqlite3.Connection) -> None:
     if version > SCHEMA_VERSION:
         raise RuntimeError(f'データベースの版({version})がこのアプリ(版 {SCHEMA_VERSION})より新しいため開けません')
     connection.executescript(SCHEMA)
-    if version < 1:
-        _add_patient_id_column(connection)
+    if version < 2:
+        # 文書は CSV2XL の DB から読むようになったため、取り込んでいた文書を消す
+        connection.execute('DROP TABLE IF EXISTS documents')
     connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
-
-
-def _add_patient_id_column(connection: sqlite3.Connection) -> None:
-    """患者IDの列がない古い DB に列を足す"""
-    columns = [row[1] for row in connection.execute('PRAGMA table_info(documents)')]
-    if 'patient_id' not in columns:
-        connection.execute("ALTER TABLE documents ADD COLUMN patient_id TEXT NOT NULL DEFAULT ''")
 
 
 @contextmanager
 def open_database(database_path: str) -> Iterator[sqlite3.Connection]:
-    """接続を開き、抜けるときに例外がなければコミット、あればロールバックして閉じる"""
+    """マスタの DB の接続を開き、抜けるときに例外がなければコミット、あればロールバックして閉じる"""
     connection = connect(database_path)
     try:
         with connection:
@@ -85,27 +73,22 @@ def open_database(database_path: str) -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
-def count_all_documents(connection: sqlite3.Connection) -> int:
-    return connection.execute('SELECT COUNT(*) FROM documents').fetchone()[0]
+def create_valid_documents_view(connection: sqlite3.Connection) -> None:
+    connection.execute(VALID_DOCUMENTS_VIEW)
+
+
+@contextmanager
+def open_documents(database_path: str) -> Iterator[sqlite3.Connection]:
+    """CSV2XL の文書の DB を読み取り専用で開く。無いファイルは作らずにエラーにする"""
+    uri = Path(database_path).resolve().as_uri() + '?mode=ro'
+    connection = sqlite3.connect(uri, uri=True, timeout=BUSY_TIMEOUT_SECONDS)
+    try:
+        create_valid_documents_view(connection)
+        yield connection
+    finally:
+        connection.close()
 
 
 def period_parameters(start_date: date, end_date: date) -> tuple[str, str]:
     """PERIOD_CONDITION に渡す値"""
     return start_date.isoformat(), end_date.isoformat()
-
-
-def count_documents_between(connection: sqlite3.Connection, start_date: date, end_date: date) -> int:
-    return connection.execute(f'SELECT COUNT(*) FROM documents WHERE {PERIOD_CONDITION}',
-                              period_parameters(start_date, end_date)).fetchone()[0]
-
-
-def replace_documents_between(connection: sqlite3.Connection, start_date: date, end_date: date,
-                              documents: list[Document]) -> None:
-    """預り日が start_date〜end_date の文書を消して、documents を入れ直す"""
-    connection.execute(f'DELETE FROM documents WHERE {PERIOD_CONDITION}', period_parameters(start_date, end_date))
-    connection.executemany(
-        'INSERT INTO documents (received_date, requested_date, document_name, department, doctor_name, staff_name,'
-        ' patient_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [(document.received_date.isoformat(), document.requested_date.isoformat(), document.document_name,
-          document.department, document.doctor_name, document.staff_name, document.patient_id)
-         for document in documents])

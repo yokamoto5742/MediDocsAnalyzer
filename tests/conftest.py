@@ -14,14 +14,9 @@ window_width = 300
 window_height = 450
 
 [PATHS]
-source_dir = {tmp_path}
+documents_database_path = {tmp_path / 'documents.db'}
 database_path = {tmp_path / 'database.db'}
-legacy_database_path = {tmp_path / 'legacy.xlsx'}
-backup_dir = {tmp_path / 'backup'}
 output_dir = {tmp_path / 'output'}
-
-[Backup]
-keep_generations = 30
 
 [Analysis]
 start_date = 2025-04-01

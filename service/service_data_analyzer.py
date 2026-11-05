@@ -108,7 +108,7 @@ def count_documents(connection: sqlite3.Connection, start_date: date, end_date: 
     condition = PERIOD_CONDITION + document_type_condition(document_type)
     by_staff_department = {
         (staff, department): count for staff, department, count in connection.execute(
-            f'SELECT staff_name, department, COUNT(*) FROM documents WHERE {condition}'
+            f'SELECT staff_name, department, COUNT(*) FROM valid_documents WHERE {condition}'
             ' GROUP BY staff_name, department', parameters)
     }
     if not by_staff_department:
@@ -118,7 +118,7 @@ def count_documents(connection: sqlite3.Connection, start_date: date, end_date: 
     for (_, department), count in by_staff_department.items():
         by_department[department] += count
     first_date, last_date = connection.execute(
-        f'SELECT MIN(received_date), MAX(received_date) FROM documents WHERE {condition}',
+        f'SELECT MIN(received_date), MAX(received_date) FROM valid_documents WHERE {condition}',
         parameters).fetchone()
 
     return DocumentCounts(
@@ -148,15 +148,15 @@ def count_staff_documents(connection: sqlite3.Connection, staff_name: str, start
     parameters = (staff_name, *period_parameters(start_date, end_date))
     condition = f'staff_name = ? AND {PERIOD_CONDITION}' + document_type_condition(document_type)
     by_department = connection.execute(
-        f'SELECT department, COUNT(*) AS count FROM documents WHERE {condition}'
+        f'SELECT department, COUNT(*) AS count FROM valid_documents WHERE {condition}'
         ' GROUP BY department ORDER BY count DESC, department', parameters).fetchall()
     # SQLite の LIMIT -1 は件数の上限なし
     by_document = connection.execute(
-        f'SELECT document_name, COUNT(*) AS count FROM documents WHERE {condition}'
+        f'SELECT document_name, COUNT(*) AS count FROM valid_documents WHERE {condition}'
         ' GROUP BY document_name ORDER BY count DESC, document_name LIMIT ?',
         (*parameters, -1 if document_limit is None else document_limit)).fetchall()
     month_counts = dict(connection.execute(
-        f"SELECT strftime('%Y/%m', received_date), COUNT(*) FROM documents WHERE {condition}"
+        f"SELECT strftime('%Y/%m', received_date), COUNT(*) FROM valid_documents WHERE {condition}"
         ' GROUP BY 1', parameters).fetchall())
 
     return StaffCounts(
@@ -192,7 +192,7 @@ def count_trend(connection: sqlite3.Connection, document_filter: DocumentFilter,
         condition += ' AND staff_name = ?'
         parameters.append(staff_name)
     month_counts = dict(connection.execute(
-        f"SELECT strftime('%Y/%m', requested_date), COUNT(*) FROM documents WHERE {condition} GROUP BY 1",
+        f"SELECT strftime('%Y/%m', requested_date), COUNT(*) FROM valid_documents WHERE {condition} GROUP BY 1",
         parameters).fetchall())
 
     # 'YYYY/MM' は文字列のまま大小を比べられる。今月は途中までの件数を出す

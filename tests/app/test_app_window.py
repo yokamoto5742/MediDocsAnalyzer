@@ -10,11 +10,10 @@ import pytest
 from app import constants
 from app.app_window import MedicalDocsAnalyzerGUI
 from app.result_view import TrendPanel
-from service.models import Document, Draft, NoDataError, RowError, SourceData
+from service.models import Draft, NoDataError
 from service.service_data_analyzer import (DocumentCounts, DocumentFilter, DocumentType, OverallSummary, StaffCounts,
                                            TrendCounts)
 from service.service_master import ADMIN_ROLE, Department, Staff
-from service.service_medical_docs_analyzer import ImportPlan
 from service.service_overview import Overview
 from utils.config_manager import load_config, save_config
 
@@ -117,33 +116,12 @@ def test_apply_period_ignores_invalid_year(gui: MedicalDocsAnalyzerGUI) -> None:
     assert gui.start_date.get() == '2025/04/01'
 
 
-def make_plan(errors: list[RowError]) -> ImportPlan:
-    source = SourceData(documents=[Document(date(2025, 4, 1), date(2025, 4, 2), '診断書', '内科', '佐藤', '植田')],
-                        errors=errors, drafts=[DRAFT],
-                        first_received_date=date(2025, 4, 1), last_received_date=date(2025, 4, 30))
-    return ImportPlan(source, date(2025, 4, 1), date(2025, 4, 30), deleted_count=3)
-
-
-def test_init_backs_up_database(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
-    analyzer.backup_database.assert_called_once_with(date.today())
-
-
 def test_init_only_builds_window(config_path: Path, root: tk.Tk) -> None:
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         MedicalDocsAnalyzerGUI(root)
 
     # 起動時の処理は start() で行う
-    analyzer_class.return_value.backup_database.assert_not_called()
     analyzer_class.return_value.load_overview.assert_not_called()
-
-
-def test_init_shows_backup_error(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
-    with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
-        analyzer_class.return_value.backup_database.side_effect = OSError('offline')
-        start_gui(root)
-
-    messagebox.showerror.assert_called_once_with(
-        constants.ERROR_TITLE, constants.BACKUP_ERROR_MESSAGE.format(error='offline'))
 
 
 def test_init_shows_overview(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
@@ -160,73 +138,6 @@ def test_init_shows_overview_error_without_dialog(config_path: Path, root: tk.Tk
     messagebox.showerror.assert_not_called()
 
 
-def test_load_excel_shows_completion(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                     messagebox: MagicMock) -> None:
-    analyzer.prepare_legacy_import.return_value = make_plan([])
-    analyzer.apply_import.return_value = 12
-    messagebox.askyesno.return_value = True
-
-    with patch('app.app_window.ImportErrorsDialog') as dialog:
-        gui.load_excel()
-
-    assert messagebox.askyesno.call_args.args[1] == constants.IMPORT_CONFIRM_MESSAGE.format(
-        start_date=date(2025, 4, 1), end_date=date(2025, 4, 30), deleted=3, inserted=1, errors=0)
-    messagebox.showinfo.assert_called_once_with(
-        constants.COMPLETE_TITLE, constants.LOAD_COMPLETE_MESSAGE.format(count=12))
-    dialog.assert_not_called()
-
-
-def test_load_excel_shows_error_rows(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                     messagebox: MagicMock) -> None:
-    errors = [RowError('legacy.xlsx', 5, '123', '預り日が空です', '')]
-    analyzer.prepare_legacy_import.return_value = make_plan(errors)
-    messagebox.askyesno.return_value = True
-
-    with patch('app.app_window.ImportErrorsDialog') as dialog:
-        gui.load_excel()
-
-    dialog.assert_called_once_with(gui.root, errors)
-
-
-def test_start_analysis_without_error_rows_dialog(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                                  messagebox: MagicMock) -> None:
-    analyzer.prepare_source_import.return_value = make_plan([RowError('source.xlsm', 5, '123', '預り日が空です', '')])
-    analyzer.overview.return_value = make_overview([])
-    analyzer.overall_summary.return_value = make_summary()
-    analyzer.staff_summary.return_value = make_staff_counts('植田')
-
-    with patch('app.app_window.ImportErrorsDialog') as dialog:
-        gui.start_analysis(show_errors=False)
-
-    # 起動時はエラー行の一覧を出さずに集計まで進める
-    dialog.assert_not_called()
-    analyzer.overall_summary.assert_called_once()
-    messagebox.showerror.assert_not_called()
-
-
-def test_load_excel_cancelled(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:
-    analyzer.prepare_legacy_import.return_value = make_plan([])
-    messagebox.askyesno.return_value = False
-
-    gui.load_excel()
-
-    analyzer.apply_import.assert_not_called()
-    messagebox.showinfo.assert_not_called()
-
-
-@pytest.mark.parametrize(('error', 'expected_message'), [
-    (NoDataError(), constants.NO_SOURCE_DATA_MESSAGE),
-    (FileNotFoundError('missing'), constants.LOAD_ERROR_MESSAGE.format(error='missing')),
-])
-def test_load_excel_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock,
-                                error: Exception, expected_message: str) -> None:
-    analyzer.prepare_legacy_import.side_effect = error
-
-    gui.load_excel()
-
-    messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
-
-
 def make_summary() -> OverallSummary:
     counts = DocumentCounts({('植田', '内科'): 2, ('花﨑', '外科'): 1}, {'内科': 2, '外科': 1}, 3,
                             date(2025, 10, 1), date(2025, 12, 31))
@@ -239,22 +150,18 @@ def make_staff_counts(name: str) -> StaffCounts:
 
 def test_start_analysis_shows_results_and_saves_settings(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
                                                          messagebox: MagicMock) -> None:
-    plan = make_plan([])
-    analyzer.prepare_source_import.return_value = plan
-    analyzer.overview.return_value = make_overview([DRAFT])
+    analyzer.load_overview.reset_mock()
+    analyzer.load_overview.return_value = make_overview([DRAFT])
     analyzer.overall_summary.return_value = make_summary()
     analyzer.staff_summary.return_value = make_staff_counts('植田')
     set_dates(gui, '2025/10/01', '2025/12/31')
     gui.year_start_month_var.set(1)
 
-    with patch('app.app_window.ImportErrorsDialog') as dialog:
-        gui.start_analysis()
+    gui.start_analysis()
 
-    analyzer.apply_import.assert_called_once_with(plan)
-    analyzer.overview.assert_called_once_with([DRAFT], date.today())
+    # CSV2XL の DB の今の内容で概要も読み直す
+    analyzer.load_overview.assert_called_once_with(date.today())
     assert len(gui.result_view.overview_tree.get_children()) == 1
-    messagebox.askyesno.assert_not_called()
-    dialog.assert_not_called()
     analyzer.overall_summary.assert_called_once_with(date(2025, 10, 1), date(2025, 12, 31), DocumentType.ALL)
     analyzer.staff_summary.assert_called_once_with('植田', date(2025, 10, 1), date(2025, 12, 31),
                                                    document_type=DocumentType.ALL)
@@ -290,13 +197,12 @@ def test_init_restores_saved_document_type(config_path: Path, root: tk.Tk, saved
     assert analyzer_class.return_value.trend_summary.call_args.args[0].document_type == expected
 
 
-def test_change_document_type_reanalyzes_without_import(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                                        open_folder_of: MagicMock) -> None:
-    analyzer.prepare_source_import.return_value = make_plan([])
+def test_change_document_type_reanalyzes(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                        open_folder_of: MagicMock) -> None:
     analyzer.overall_summary.return_value = make_summary()
     analyzer.staff_summary.return_value = make_staff_counts('植田')
     gui.start_analysis()
-    for mock in (analyzer.prepare_source_import, analyzer.overall_summary, analyzer.staff_summary,
+    for mock in (analyzer.load_overview, analyzer.overall_summary, analyzer.staff_summary,
                  analyzer.trend_summary):
         mock.reset_mock()
 
@@ -306,7 +212,7 @@ def test_change_document_type_reanalyzes_without_import(gui: MedicalDocsAnalyzer
     gui.export_staff()
 
     assert gui.document_type == DocumentType.MEDICAL
-    analyzer.prepare_source_import.assert_not_called()
+    analyzer.load_overview.assert_not_called()
     analyzer.overall_summary.assert_called_once_with(date(2025, 4, 1), date(2025, 6, 30), DocumentType.MEDICAL)
     analyzer.staff_summary.assert_called_once_with('植田', date(2025, 4, 1), date(2025, 6, 30),
                                                    document_type=DocumentType.MEDICAL)
@@ -358,41 +264,12 @@ def test_start_analysis_rejects_invalid_dates(gui: MedicalDocsAnalyzerGUI, analy
 ])
 def test_start_analysis_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock,
                                     error: Exception, expected_message: str) -> None:
-    analyzer.prepare_source_import.return_value = make_plan([])
     analyzer.overall_summary.side_effect = error
 
     gui.start_analysis()
 
     messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
     assert gui.period is None
-
-
-def test_start_analysis_shows_import_error_rows_then_analyzes(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock) -> None:
-    errors = [RowError('source.xlsm', 5, '123', '預り日が空です', '')]
-    analyzer.prepare_source_import.return_value = make_plan(errors)
-    analyzer.overall_summary.return_value = make_summary()
-    analyzer.staff_summary.return_value = make_staff_counts('植田')
-
-    with patch('app.app_window.ImportErrorsDialog') as dialog:
-        gui.start_analysis()
-
-    dialog.assert_called_once_with(gui.root, errors)
-    analyzer.overall_summary.assert_called_once()
-
-
-@pytest.mark.parametrize(('error', 'expected_message'), [
-    (NoDataError(), constants.NO_SOURCE_DATA_MESSAGE),
-    (FileNotFoundError('missing'), constants.LOAD_ERROR_MESSAGE.format(error='missing')),
-])
-def test_start_analysis_stops_when_import_fails(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
-                                                messagebox: MagicMock, error: Exception,
-                                                expected_message: str) -> None:
-    analyzer.prepare_source_import.side_effect = error
-
-    gui.start_analysis()
-
-    messagebox.showerror.assert_called_once_with(constants.ERROR_TITLE, expected_message)
-    analyzer.overall_summary.assert_not_called()
 
 
 def test_export_requires_analysis(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, messagebox: MagicMock) -> None:
@@ -434,7 +311,6 @@ def test_staff_user_sees_only_own_summary(config_path: Path, root: tk.Tk, messag
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         gui = start_gui(root, Staff(2, '花﨑', 2, emr_id='S01'))
         analyzer = analyzer_class.return_value
-        analyzer.prepare_source_import.return_value = make_plan([])
         analyzer.overall_summary.return_value = make_summary()
         analyzer.staff_summary.return_value = make_staff_counts('花﨑')
 
@@ -482,7 +358,7 @@ def test_analyze_saved_period_runs_analysis(gui: MedicalDocsAnalyzerGUI) -> None
     with patch.object(gui, 'start_analysis') as start_analysis:
         ANALYZE_SAVED_PERIOD(gui)
 
-    start_analysis.assert_called_once_with(show_errors=False)
+    start_analysis.assert_called_once_with()
 
 
 def test_analyze_saved_period_skips_without_saved_dates(gui: MedicalDocsAnalyzerGUI) -> None:

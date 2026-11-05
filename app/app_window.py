@@ -1,5 +1,4 @@
 import tkinter as tk
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from tkinter import messagebox, ttk
@@ -9,15 +8,14 @@ from tkcalendar import DateEntry
 from app import __version__, constants
 from app.date_entry import make_date_entry, read_date_range
 from app.folder import open_folder_of
-from app.import_errors_dialog import ImportErrorsDialog
 from app.login_dialog import ChangePasswordDialog
 from app.master_dialog import MasterDialog
 from app.result_view import ResultView, TrendPanel
 from app.settings_dialog import SettingsDialog
-from service.models import Draft, NoDataError
+from service.models import NoDataError
 from service.service_data_analyzer import DocumentFilter, DocumentType, trend_subject
 from service.service_master import ADMIN_ROLE, Staff
-from service.service_medical_docs_analyzer import ImportPlan, MedicalDocsAnalyzer
+from service.service_medical_docs_analyzer import MedicalDocsAnalyzer
 from utils.config_manager import load_config, update_config
 from utils.date_period import PERIOD_NAMES, fiscal_year, get_period_range
 
@@ -68,8 +66,7 @@ class MedicalDocsAnalyzerGUI:
         self._setup_gui()
 
     def start(self) -> None:
-        """起動時の処理。DB のバックアップ、概要と推移の表示、前回の期間の集計をする"""
-        self.backup_database()
+        """起動時の処理。概要と推移の表示、前回の期間の集計をする"""
         self.refresh_overview()
         self.load_trend()
         self.analyze_saved_period()
@@ -105,7 +102,7 @@ class MedicalDocsAnalyzerGUI:
         return self.user.name
 
     def _apply_permissions(self) -> None:
-        """職員は Excel読込・マスタ・設定を使えず、自分の個人集計だけを見られる"""
+        """職員はマスタ・設定を使えず、自分の個人集計だけを見られる"""
         if self.restricted_staff is None:
             return
         for button in self.admin_buttons:
@@ -194,80 +191,35 @@ class MedicalDocsAnalyzerGUI:
             row=3, column=0, columnspan=2, pady=10)
         master_button = ttk.Button(parent, text=constants.MASTER_BUTTON_LABEL, command=self.open_master)
         master_button.grid(row=4, column=0, columnspan=2, pady=5)
-        load_button = ttk.Button(parent, text=constants.EXCEL_IMPORT_BUTTON_LABEL, command=self.load_excel)
-        load_button.grid(row=5, column=0, columnspan=2, pady=5)
         settings_button = ttk.Button(parent, text=constants.SETTINGS_BUTTON_LABEL, command=self.open_settings)
-        settings_button.grid(row=6, column=0, columnspan=2, pady=5)
+        settings_button.grid(row=5, column=0, columnspan=2, pady=5)
         if self.user is not None:
             ttk.Button(parent, text=constants.CHANGE_PASSWORD_BUTTON_LABEL, command=self.change_password).grid(
-                row=7, column=0, columnspan=2, pady=5)
+                row=6, column=0, columnspan=2, pady=5)
         ttk.Button(parent, text=constants.CLOSE_BUTTON_LABEL, command=self.root.quit).grid(
-            row=8, column=0, columnspan=2, pady=5)
-        self.admin_buttons = [load_button, master_button, settings_button]
+            row=7, column=0, columnspan=2, pady=5)
+        self.admin_buttons = [master_button, settings_button]
 
-    def backup_database(self) -> None:
+    def refresh_overview(self) -> None:
+        """CSV2XL の DB から下書きを読み直す。起動のたびにダイアログを出さないよう、失敗はタブ内に出す"""
         try:
-            self.analyzer.backup_database(date.today())
-        except Exception as e:
-            messagebox.showerror(constants.ERROR_TITLE, constants.BACKUP_ERROR_MESSAGE.format(error=e))
-
-    def refresh_overview(self, drafts: list[Draft] | None = None) -> None:
-        """drafts が None なら元データを読み直す。起動のたびにダイアログを出さないよう、失敗はタブ内に出す"""
-        try:
-            overview = (self.analyzer.load_overview(date.today()) if drafts is None
-                        else self.analyzer.overview(drafts, date.today()))
-            self.result_view.show_overview(overview)
+            self.result_view.show_overview(self.analyzer.load_overview(date.today()))
         except Exception as e:
             self.result_view.show_overview_error(e)
 
-    def load_excel(self) -> None:
-        """旧 DB(xlsx)を確認してから取り込む"""
-        self._import(self.analyzer.prepare_legacy_import, confirm=True)
-
-    @staticmethod
-    def _import_confirm_message(plan: ImportPlan) -> str:
-        return constants.IMPORT_CONFIRM_MESSAGE.format(
-            start_date=plan.start_date, end_date=plan.end_date, deleted=plan.deleted_count,
-            inserted=len(plan.source.documents), errors=len(plan.source.errors))
-
-    def _import(self, prepare: Callable[[], ImportPlan], confirm: bool,
-                show_errors: bool = True) -> ImportPlan | None:
-        """prepare で作った計画どおりに取り込み、計画を返す。やめたか失敗したら None。
-        confirm なら取り込む前に件数を確かめ、取り込んだ後に DB の件数を知らせる。
-        show_errors なら取り込めなかった行の一覧を出す"""
-        try:
-            plan = prepare()
-            if confirm and not messagebox.askyesno(constants.CONFIRM_TITLE, self._import_confirm_message(plan)):
-                return None
-            count = self.analyzer.apply_import(plan)
-        except NoDataError:
-            messagebox.showerror(constants.ERROR_TITLE, constants.NO_SOURCE_DATA_MESSAGE)
-            return None
-        except Exception as e:
-            messagebox.showerror(constants.ERROR_TITLE, constants.LOAD_ERROR_MESSAGE.format(error=e))
-            return None
-        if confirm:
-            messagebox.showinfo(constants.COMPLETE_TITLE, constants.LOAD_COMPLETE_MESSAGE.format(count=count))
-        if show_errors and plan.source.errors:
-            ImportErrorsDialog(self.root, plan.source.errors)
-        return plan
-
-    def start_analysis(self, show_errors: bool = True) -> None:
+    def start_analysis(self) -> None:
+        """CSV2XL の DB の今の内容で、概要を読み直して全体・個人を集計する"""
         try:
             start_date, end_date = read_date_range(self.start_date, self.end_date)
         except ValueError as e:
             messagebox.showerror(constants.ERROR_TITLE, str(e))
             return
 
-        # 元データ(xlsm)は確認なしで取り込む
-        plan = self._import(self.analyzer.prepare_source_import, confirm=False, show_errors=show_errors)
-        if plan is None:
-            return
-        self.refresh_overview(plan.source.drafts)
+        self.refresh_overview()
         self._show_analysis(start_date, end_date, save_settings=True)
 
     def change_document_type(self, _event: tk.Event | None = None) -> None:
-        """集計対象を選び直したら、元データは取り込まずに DB から推移と、集計済みなら全体・個人を集計し直す"""
+        """集計対象を選び直したら、推移と、集計済みなら全体・個人を集計し直す"""
         document_type = DocumentType(self.document_type_var.get())
         if document_type == self.document_type:
             return
@@ -298,10 +250,9 @@ class MedicalDocsAnalyzerGUI:
         self.show_staff_summary()
 
     def analyze_saved_period(self) -> None:
-        """前回集計した期間が設定に残っていれば、起動時に「集計開始」と同じく取り込んでから集計する。
-        起動のたびに出ると煩わしいため、取り込めなかった行の一覧は出さない"""
+        """前回集計した期間が設定に残っていれば、起動時に「集計開始」と同じく集計する"""
         if self.config.has_option('Analysis', 'start_date') and self.config.has_option('Analysis', 'end_date'):
-            self.start_analysis(show_errors=False)
+            self.start_analysis()
 
     def show_staff_summary(self) -> None:
         staff_name = self.result_view.staff_var.get()
@@ -456,7 +407,7 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.MASTER_OPEN_ERROR_MESSAGE.format(error=e))
 
     def open_settings(self) -> None:
-        """保存したら、概要の日数や元データのパスの変更をすぐ反映する"""
+        """保存したら、概要の日数や文書の DB のパスの変更をすぐ反映する"""
         dialog = SettingsDialog(self.root)
         self.root.wait_window(dialog.dialog)
         if dialog.saved:

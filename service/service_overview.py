@@ -1,11 +1,20 @@
+import sqlite3
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
+from typing import Any
 
 from service.models import Draft
 
 DEFAULT_PENDING_DAYS = 7
+# 論理削除していない行のうち、担当者名か医師依頼日が空の行(下書き)
+DRAFTS_QUERY = (
+    'SELECT received_date, requested_date, document_name, department, doctor_name, staff_name, patient_id'
+    ' FROM documents WHERE deleted = 0 AND received_date BETWEEN ? AND ?'
+    " AND (IFNULL(staff_name, '') = '' OR IFNULL(requested_date, '') = '')"
+    ' ORDER BY received_date DESC, id')
 
 
 class DraftStatus(StrEnum):
@@ -41,9 +50,15 @@ class Overview:
         return sorted(by_department.items(), key=lambda item: (-item[1].total(), item[0]))
 
 
-def make_overview(drafts: list[Draft], today: date, days: int) -> Overview:
-    """本日を含めて days 日間に預かった下書きを、預り日の新しい順に並べる"""
+def draft_from_row(row: Sequence[Any]) -> Draft:
+    """DRAFTS_QUERY の順に並んだ行から下書きを作る。CSV2XL の DB は患者IDが整数で、空欄は NULL"""
+    received, requested, document_name, department, doctor_name, staff_name, patient_id = row
+    return Draft(date.fromisoformat(received), date.fromisoformat(requested) if requested else None,
+                 document_name, department, doctor_name, staff_name or '', str(patient_id))
+
+
+def load_overview(connection: sqlite3.Connection, today: date, days: int) -> Overview:
+    """CSV2XL の DB から、本日を含めて days 日間に預かった下書きを、預り日の新しい順に読む"""
     start_date = today - timedelta(days=days - 1)
-    targets = [draft for draft in drafts if start_date <= draft.received_date <= today]
-    targets.sort(key=lambda draft: draft.received_date, reverse=True)
-    return Overview(start_date, today, targets)
+    rows = connection.execute(DRAFTS_QUERY, (start_date.isoformat(), today.isoformat()))
+    return Overview(start_date, today, [draft_from_row(row) for row in rows])

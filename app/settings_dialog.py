@@ -3,22 +3,20 @@ from collections.abc import Callable
 from tkinter import filedialog, messagebox, ttk
 
 from app import constants
-from service.service_medical_docs_analyzer import DEFAULT_SOURCE_DIR
+from service.service_medical_docs_analyzer import DEFAULT_DOCUMENTS_DATABASE_PATH
 from service.service_overview import DEFAULT_PENDING_DAYS
 from utils.config_manager import load_config, update_config
 
-EXCEL_FILE_TYPES = [(constants.EXCEL_FILE_TYPE_LABEL, '*.xlsx *.xlsm')]
 DATABASE_FILE_TYPES = [(constants.DATABASE_FILE_TYPE_LABEL, '*.db')]
 # (セクション, キー, ラベル, 最小値, 最大値)
 NUMBER_SETTINGS: list[tuple[str, str, str, int, int]] = [
     ('Appearance', 'window_width', constants.WINDOW_WIDTH_LABEL, 800, 3840),
     ('Appearance', 'window_height', constants.WINDOW_HEIGHT_LABEL, 600, 2160),
-    ('Backup', 'keep_generations', constants.KEEP_GENERATIONS_LABEL, 1, 365),
     ('Overview', 'pending_days', constants.PENDING_DAYS_LABEL, 1, 365),
 ]
 # 古い設定ファイルに無い項目の初期値
 NUMBER_DEFAULTS = {'pending_days': str(DEFAULT_PENDING_DAYS)}
-PATH_DEFAULTS = {'source_dir': DEFAULT_SOURCE_DIR}
+PATH_DEFAULTS = {'documents_database_path': DEFAULT_DOCUMENTS_DATABASE_PATH}
 
 
 class SettingsDialog:
@@ -34,10 +32,8 @@ class SettingsDialog:
 
         config = load_config()
         path_rows: list[tuple[str, str, Callable[[str], None]]] = [
-            ('source_dir', constants.SOURCE_DIR_LABEL, self._choose_directory),
+            ('documents_database_path', constants.DOCUMENTS_DATABASE_FILE_LABEL, self._choose_documents_database),
             ('database_path', constants.DATABASE_FILE_LABEL, self._choose_database),
-            ('legacy_database_path', constants.LEGACY_DATABASE_FILE_LABEL, self._choose_file),
-            ('backup_dir', constants.BACKUP_DIR_LABEL, self._choose_directory),
             ('output_dir', constants.OUTPUT_DIR_LABEL, self._choose_directory),
         ]
         self.path_vars = {key: tk.StringVar(value=config['PATHS'].get(key, PATH_DEFAULTS.get(key, '')))
@@ -74,8 +70,9 @@ class SettingsDialog:
         ttk.Button(parent, text=constants.BROWSE_BUTTON_LABEL,
                    command=lambda: choose_command(key)).grid(row=row, column=2, padx=5, pady=5)
 
-    def _choose_file(self, key: str) -> None:
-        selected = filedialog.askopenfilename(parent=self.dialog, filetypes=EXCEL_FILE_TYPES)
+    def _choose_documents_database(self, key: str) -> None:
+        # CSV2XL が作った DB を読むだけなので、ある DB から選ぶ
+        selected = filedialog.askopenfilename(parent=self.dialog, filetypes=DATABASE_FILE_TYPES)
         if selected:
             self.path_vars[key].set(selected.replace('/', '\\'))
 

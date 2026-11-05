@@ -1,27 +1,21 @@
 import json
-from datetime import date, datetime
+import sqlite3
+from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pytest
-from openpyxl import Workbook
 
 from service.service_data_analyzer import DocumentType, count_documents
-from service.service_database import connect, replace_documents_between
-from service.service_excel_reader import read_documents
+from service.service_overview import load_overview
+from tests.documents_database import Document, make_documents_connection
 
 GOLDEN_PATH = Path(__file__).parent.parent / 'fixtures' / 'source_golden.json'
 
 
-def to_cell(value: Any) -> object:
-    """見本のセルの値を openpyxl に書く値にする。{"datetime": ...} だけ日時に変える"""
-    if isinstance(value, dict):
-        return datetime.fromisoformat(value['datetime'])
-    return value
-
-
-def iso_or_none(value: date | None) -> str | None:
-    return None if value is None else value.isoformat()
+def date_or_none(value: str | None) -> date | None:
+    return None if value is None else date.fromisoformat(value)
 
 
 @pytest.fixture
@@ -30,50 +24,43 @@ def golden() -> dict[str, Any]:
 
 
 @pytest.fixture
-def golden_path(tmp_path: Path, golden: dict[str, Any]) -> Path:
-    wb = Workbook()
-    sheet = wb.active
-    assert sheet is not None
-    sheet.append(golden['headers'])
+def connection(golden: dict[str, Any]) -> Iterator[sqlite3.Connection]:
+    """見本の行を CSV2XL と同じスキーマの DB に入れる"""
+    documents = []
     for row in golden['rows']:
-        sheet.append([to_cell(value) for value in row])
-    path = tmp_path / '医療文書担当一覧_202504300000.xlsm'
-    wb.save(path)
-    return path
+        values = dict(zip(golden['columns'], row))
+        documents.append(Document(
+            date.fromisoformat(values['received_date']), date_or_none(values['requested_date']),
+            values['document_name'], values['department'], values['doctor_name'], values['staff_name'],
+            values['patient_id'], bool(values['deleted'])))
+    connection = make_documents_connection(documents)
+    yield connection
+    connection.close()
 
 
-def test_read_documents_matches_golden(golden: dict[str, Any], golden_path: Path) -> None:
-    source = read_documents(str(golden_path), set(golden['known_staff']))
-    expected = golden['expected']
-
-    assert [[item.received_date.isoformat(), item.requested_date.isoformat(), item.document_name,
-             item.department, item.doctor_name, item.staff_name, item.patient_id]
-            for item in source.documents] == expected['documents']
-    assert [[item.received_date.isoformat(), iso_or_none(item.requested_date), item.document_name,
-             item.department, item.doctor_name, item.staff_name, item.patient_id]
-            for item in source.drafts] == expected['drafts']
-    assert [[error.row_number, error.patient_id, error.reason] for error in source.errors] == expected['errors']
-    assert iso_or_none(source.first_received_date) == expected['first_received_date']
-    assert iso_or_none(source.last_received_date) == expected['last_received_date']
-
-
-def test_count_documents_matches_golden(golden: dict[str, Any], golden_path: Path) -> None:
-    source = read_documents(str(golden_path), set(golden['known_staff']))
+def test_count_documents_matches_golden(golden: dict[str, Any], connection: sqlite3.Connection) -> None:
     expected = golden['expected']['overall']
-    connection = connect(':memory:')
-    assert source.first_received_date is not None and source.last_received_date is not None
-    replace_documents_between(connection, source.first_received_date, source.last_received_date, source.documents)
-
     start_date = date.fromisoformat(expected['start_date'])
     end_date = date.fromisoformat(expected['end_date'])
+
     counts = count_documents(connection, start_date, end_date)
     by_document_type = {
         name: sorted([staff, department, count] for (staff, department), count
                      in count_documents(connection, start_date, end_date, DocumentType(name)).by_staff_department.items())
         for name in expected['by_document_type']}
-    connection.close()
 
     assert sorted([staff, department, count] for (staff, department), count
                   in counts.by_staff_department.items()) == expected['by_staff_department']
     assert counts.total == expected['total']
     assert by_document_type == expected['by_document_type']
+
+
+def test_load_overview_matches_golden(golden: dict[str, Any], connection: sqlite3.Connection) -> None:
+    expected = golden['expected']['overview']
+
+    overview = load_overview(connection, date.fromisoformat(expected['today']), expected['days'])
+
+    assert overview.start_date.isoformat() == expected['start_date']
+    assert [[item.received_date.isoformat(), None if item.requested_date is None else item.requested_date.isoformat(),
+             item.document_name, item.department, item.doctor_name, item.staff_name, item.patient_id]
+            for item in overview.drafts] == expected['drafts']

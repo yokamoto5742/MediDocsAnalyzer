@@ -4,11 +4,11 @@ from datetime import date
 
 import pytest
 
-from service.models import Document, NoDataError
+from service.models import NoDataError
 from service.service_data_analyzer import (DocumentCounts, DocumentFilter, DocumentType, OverallSummary,
                                            count_documents, count_staff_documents, count_trend, months_between,
                                            trend_subject)
-from service.service_database import connect, replace_documents_between
+from tests.documents_database import Document, insert_documents, make_documents_connection
 
 
 def document(received: date, department: str, staff: str) -> Document:
@@ -27,8 +27,7 @@ def test_overall_summary_rows() -> None:
 
 @pytest.fixture
 def connection() -> Iterator[sqlite3.Connection]:
-    connection = connect(':memory:')
-    replace_documents_between(connection, date(2025, 1, 1), date(2099, 12, 31), [
+    connection = make_documents_connection([
         document(date(2025, 3, 31), '内科', '植田'),
         document(date(2025, 4, 5), '内科', '植田'),
         document(date(2025, 4, 6), '内科', '植田'),
@@ -52,8 +51,7 @@ def test_count_documents_includes_both_ends(connection: sqlite3.Connection) -> N
 
 @pytest.fixture
 def opinion_connection() -> Iterator[sqlite3.Connection]:
-    connection = connect(':memory:')
-    replace_documents_between(connection, date(2025, 1, 1), date(2099, 12, 31), [
+    connection = make_documents_connection([
         Document(date(2025, 4, 1), date(2025, 4, 2), '主治医意見書(新規)', '内科', '佐藤', '植田'),
         Document(date(2025, 4, 3), date(2025, 4, 4), '主治医意見書', '外科', '鈴木', '植田'),
         Document(date(2025, 4, 5), date(2025, 5, 6), '主治医意見書 更新', '外科', '鈴木', '花﨑'),
@@ -118,7 +116,7 @@ def test_months_between() -> None:
 
 
 def test_count_staff_documents(connection: sqlite3.Connection) -> None:
-    replace_documents_between(connection, date(2025, 8, 1), date(2099, 12, 31), [
+    insert_documents(connection, [
         Document(date(2025, 8, 1), date(2025, 8, 2), '紹介状', '内科', '佐藤', '植田'),
         Document(date(2025, 8, 3), date(2025, 8, 4), '紹介状', '外科', '佐藤', '植田'),
         Document(date(2025, 8, 5), date(2025, 8, 6), '診断書', '外科', '佐藤', '植田'),
@@ -144,8 +142,7 @@ def test_count_staff_documents_without_data(connection: sqlite3.Connection) -> N
 
 
 def test_count_trend_uses_requested_date_by_fiscal_year() -> None:
-    connection = connect(':memory:')
-    replace_documents_between(connection, date(2024, 1, 1), date(2099, 12, 31), [
+    connection = make_documents_connection([
         # 預り日ではなく医師依頼日で数える
         Document(date(2025, 3, 20), date(2025, 4, 2), '診断書', '内科', '佐藤', '植田'),
         Document(date(2025, 4, 3), date(2025, 4, 3), '診断書', '外科', '佐藤', '植田'),
@@ -170,8 +167,7 @@ def test_count_trend_uses_requested_date_by_fiscal_year() -> None:
 
 
 def test_count_trend_limits_to_date_range() -> None:
-    connection = connect(':memory:')
-    replace_documents_between(connection, date(2024, 1, 1), date(2099, 12, 31), [
+    connection = make_documents_connection([
         Document(date(2025, 2, 1), date(2025, 2, 10), '診断書', '内科', '佐藤', '植田'),
         Document(date(2025, 2, 1), date(2025, 2, 20), '診断書', '内科', '佐藤', '植田'),
         Document(date(2025, 11, 1), date(2025, 11, 2), '診断書', '内科', '佐藤', '植田'),
@@ -185,7 +181,7 @@ def test_count_trend_limits_to_date_range() -> None:
 
 
 def test_count_trend_calendar_year() -> None:
-    trend = count_trend(connect(':memory:'), DocumentFilter(), date(2025, 1, 1), date(2025, 12, 31), 1, date(2026, 1, 1))
+    trend = count_trend(make_documents_connection(), DocumentFilter(), date(2025, 1, 1), date(2025, 12, 31), 1, date(2026, 1, 1))
 
     assert (trend.year_header, trend.month_labels[0]) == ('年', '1月')
     assert trend.by_year == [(2025, [0] * 12)]
