@@ -307,6 +307,17 @@ def test_export_shows_error(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock, me
         constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error='locked'))
 
 
+def test_export_shows_template_not_found(gui: MedicalDocsAnalyzerGUI, analyzer: MagicMock,
+                                         messagebox: MagicMock) -> None:
+    gui.period = (date(2025, 4, 1), date(2025, 4, 30))
+    analyzer.run_analysis.side_effect = FileNotFoundError(2, 'not found', 'C:\\template\\a.xlsx')
+
+    gui.export_overall()
+
+    messagebox.showerror.assert_called_once_with(
+        constants.ERROR_TITLE, constants.TEMPLATE_NOT_FOUND_MESSAGE.format(path='C:\\template\\a.xlsx'))
+
+
 def test_staff_user_sees_only_own_summary(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         gui = start_gui(root, Staff(2, '花﨑', 2, emr_id='S01'))
@@ -426,7 +437,7 @@ def test_refresh_staff_trend_restores_and_saves_selection(config_path: Path, roo
     gui.export_staff_trend()
 
     analyzer.trend_summary.assert_called_with(DocumentFilter('外科'), date(2024, 1, 1), date(2026, 10, 1), 4, date.today(), '植田')
-    analyzer.export_trend.assert_called_once_with('植田 全書類 外科', DocumentFilter('外科'), date(2024, 1, 1), date(2026, 10, 1), 4,
+    analyzer.export_trend.assert_called_once_with(DocumentFilter('外科'), date(2024, 1, 1), date(2026, 10, 1), 4,
                                                   date.today(), '植田')
     assert load_config()['StaffTrend']['staff_name'] == '植田'
     open_folder_of.assert_called_once_with(analyzer.export_trend.return_value)
@@ -494,7 +505,7 @@ def test_export_trend_uses_selected_department(gui: MedicalDocsAnalyzerGUI, anal
 
     gui.export_trend()
 
-    analyzer.export_trend.assert_called_once_with('全書類 外科', DocumentFilter('外科'), date(2024, 1, 1),
+    analyzer.export_trend.assert_called_once_with(DocumentFilter('外科'), date(2024, 1, 1),
                                                   date(2025, 12, 31), 4, date.today(), None)
 
 
@@ -504,7 +515,7 @@ def test_export_trend_passes_total_as_all_departments(gui: MedicalDocsAnalyzerGU
 
     gui.export_trend()
 
-    analyzer.export_trend.assert_called_once_with('全書類', DocumentFilter(), date(2024, 1, 1),
+    analyzer.export_trend.assert_called_once_with(DocumentFilter(), date(2024, 1, 1),
                                                   date(2025, 12, 31), 4, date.today(), None)
 
 
@@ -515,7 +526,7 @@ def test_export_trend_uses_applied_document_type(gui: MedicalDocsAnalyzerGUI, an
 
     gui.export_trend()
 
-    analyzer.export_trend.assert_called_once_with('主治医意見書', DocumentFilter(document_type=DocumentType.OPINION),
+    analyzer.export_trend.assert_called_once_with(DocumentFilter(document_type=DocumentType.OPINION),
                                                   date(2024, 1, 1), date(2025, 12, 31), 4, date.today(), None)
 
 

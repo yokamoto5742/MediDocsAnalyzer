@@ -3,7 +3,8 @@ from collections.abc import Callable
 from tkinter import filedialog, messagebox, ttk
 
 from app import constants
-from service.service_medical_docs_analyzer import DEFAULT_DOCUMENTS_DATABASE_PATH
+from service.service_excel_writer import DEFAULT_STAFF_FONT_SIZE
+from service.service_medical_docs_analyzer import DEFAULT_DOCUMENTS_DATABASE_PATH, DEFAULT_TEMPLATE_DIR
 from service.service_overview import DEFAULT_PENDING_DAYS
 from utils.config_manager import load_config, update_config
 
@@ -13,10 +14,11 @@ NUMBER_SETTINGS: list[tuple[str, str, str, int, int]] = [
     ('Appearance', 'window_width', constants.WINDOW_WIDTH_LABEL, 800, 3840),
     ('Appearance', 'window_height', constants.WINDOW_HEIGHT_LABEL, 600, 2160),
     ('Overview', 'pending_days', constants.PENDING_DAYS_LABEL, 1, 365),
+    ('Excel', 'staff_font_size', constants.STAFF_FONT_SIZE_LABEL, 8, 36),
 ]
 # 古い設定ファイルに無い項目の初期値
-NUMBER_DEFAULTS = {'pending_days': str(DEFAULT_PENDING_DAYS)}
-PATH_DEFAULTS = {'documents_database_path': DEFAULT_DOCUMENTS_DATABASE_PATH}
+NUMBER_DEFAULTS = {'pending_days': str(DEFAULT_PENDING_DAYS), 'staff_font_size': str(DEFAULT_STAFF_FONT_SIZE)}
+PATH_DEFAULTS = {'documents_database_path': DEFAULT_DOCUMENTS_DATABASE_PATH, 'template_dir': DEFAULT_TEMPLATE_DIR}
 
 
 class SettingsDialog:
@@ -35,6 +37,7 @@ class SettingsDialog:
             ('documents_database_path', constants.DOCUMENTS_DATABASE_FILE_LABEL, self._choose_documents_database),
             ('database_path', constants.DATABASE_FILE_LABEL, self._choose_database),
             ('output_dir', constants.OUTPUT_DIR_LABEL, self._choose_directory),
+            ('template_dir', constants.TEMPLATE_DIR_LABEL, self._choose_directory),
         ]
         self.path_vars = {key: tk.StringVar(value=config['PATHS'].get(key, PATH_DEFAULTS.get(key, '')))
                           for key, _, _ in path_rows}

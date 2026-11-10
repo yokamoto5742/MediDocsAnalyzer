@@ -25,6 +25,12 @@ def document(received: date, requested: date | None, department: str, staff: str
     return Document(received, requested, document_name, department, '佐藤', staff, patient_id)
 
 
+def table_rows(path: str, rows: list[int]) -> list[list[object]]:
+    """全体のテンプレートの A〜D 列(氏名・合計・内科・外科)"""
+    sheet = load_workbook(path).worksheets[0]
+    return [[sheet.cell(row=row, column=column).value for column in range(1, 5)] for row in rows]
+
+
 def test_split_list() -> None:
     assert split_list(' 植田, 花﨑 ,,') == ['植田', '花﨑']
 
@@ -70,10 +76,8 @@ def test_run_analysis(config_path: Path) -> None:
     output_path = MedicalDocsAnalyzer().run_analysis(date(2025, 4, 1), date(2025, 6, 30))
 
     assert Path(output_path).name == '医療文書作成件数_全書類_20250401-20250510.xlsx'
-    sheet = load_workbook(output_path).active
-    assert sheet is not None
-    assert [list(row) for row in sheet.iter_rows(min_row=2, values_only=True)] == [
-        ['氏名', '合計', '内科', '外科'],
+    # テンプレートの植田は 3 行目、沖野は 4 行目、花﨑は 13 行目、合計は 16 行目
+    assert table_rows(output_path, [3, 4, 13, 16]) == [
         ['植田', 1, 1, 0],
         ['沖野', 0, 0, 0],
         ['花﨑', 1, 0, 1],
@@ -93,14 +97,10 @@ def test_run_analysis_uses_masters(config_path: Path) -> None:
 
     output_path = analyzer.run_analysis(date(2025, 4, 1), date(2025, 4, 30))
 
-    sheet = load_workbook(output_path).active
-    assert sheet is not None
-    assert [list(row) for row in sheet.iter_rows(min_row=2, values_only=True)] == [
-        ['氏名', '合計', '眼科', '内科', '外科'],
-        ['植田', 1, 1, 0, 0],
-        ['花﨑', 0, 0, 0, 0],
-        ['合計', 1, 1, 0, 0],
-    ]
+    # 退職した植田も件数があれば出す。眼科はテンプレートの H 列
+    sheet = load_workbook(output_path).worksheets[0]
+    assert [sheet[f'{column}3'].value for column in 'ABCH'] == ['植田', 1, 0, 1]
+    assert [sheet[f'{column}16'].value for column in 'ABCH'] == ['合計', 1, 0, 1]
 
 
 def test_export_staff(config_path: Path) -> None:
@@ -135,11 +135,12 @@ def test_trend_summary_and_export(config_path: Path) -> None:
     start_date, end_date = date(2025, 4, 1), date(2026, 3, 31)
     total = analyzer.trend_summary(DocumentFilter(), start_date, end_date, 4, date(2026, 11, 1))
     surgery = analyzer.trend_summary(DocumentFilter('外科'), start_date, end_date, 4, date(2026, 11, 1))
-    output_path = analyzer.export_trend('外科', DocumentFilter('外科'), start_date, end_date, 4, date(2026, 11, 1))
+    output_path = analyzer.export_trend(DocumentFilter('外科'), start_date, end_date, 4, date(2026, 11, 1))
 
     assert total.by_year == [(2025, [1, 1, *[0] * 10])]
     assert surgery.by_year == [(2025, [0, 1, *[0] * 10])]
-    assert Path(output_path) == config_path.parent / 'output' / '医療文書作成件数推移_外科_20250401-20260331.xlsx'
+    assert Path(output_path) == (config_path.parent / 'output'
+                                 / '医療文書作成件数推移_全書類_外科_20250401-20260331.xlsx')
 
 
 def test_staff_trend_summary_and_export(config_path: Path) -> None:
@@ -151,12 +152,23 @@ def test_staff_trend_summary_and_export(config_path: Path) -> None:
 
     start_date, end_date = date(2025, 4, 1), date(2026, 3, 31)
     trend = analyzer.trend_summary(DocumentFilter(), start_date, end_date, 4, date(2026, 11, 1), '花﨑')
-    output_path = analyzer.export_trend('花﨑 内科', DocumentFilter('内科'), start_date, end_date, 4, date(2026, 11, 1), '花﨑')
+    output_path = analyzer.export_trend(DocumentFilter('内科'), start_date, end_date, 4, date(2026, 11, 1), '花﨑')
 
     assert trend.by_year == [(2025, [1, *[0] * 11])]
-    assert Path(output_path) == config_path.parent / 'output' / '医療文書作成件数推移_花﨑_内科_20250401-20260331.xlsx'
-    assert load_workbook(output_path)['推移']['A1'].value == (
-        '医療文書作成件数推移(医師依頼日) 花﨑 内科 2025/04/01～2026/03/31')
+    assert Path(output_path) == (config_path.parent / 'output'
+                                 / '医療文書作成件数推移_花﨑_全書類_内科_20250401-20260331.xlsx')
+    assert load_workbook(output_path)['一覧']['B3'].value == 1
+
+
+def test_export_staff_uses_configured_font_size(config_path: Path) -> None:
+    make_documents(config_path, [document(date(2025, 4, 1), date(2025, 4, 2), '内科', '花﨑')])
+    config = load_config()
+    config['Excel'] = {'staff_font_size': '18'}
+    save_config(config)
+
+    output_path = MedicalDocsAnalyzer().export_staff('花﨑', date(2025, 4, 1), date(2025, 4, 30))
+
+    assert load_workbook(output_path)['個人']['B2'].font.sz == 18
 
 
 def test_run_analysis_raises_when_no_data_in_period(config_path: Path) -> None:

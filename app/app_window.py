@@ -270,6 +270,8 @@ class MedicalDocsAnalyzerGUI:
             return
         try:
             open_folder_of(self.analyzer.run_analysis(*self.period, self.document_type))
+        except FileNotFoundError as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.TEMPLATE_NOT_FOUND_MESSAGE.format(path=e.filename))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
@@ -371,8 +373,10 @@ class MedicalDocsAnalyzerGUI:
             return
         try:
             open_folder_of(self.analyzer.export_trend(
-                request.subject, request.document_filter, request.start_date, request.end_date,
+                request.document_filter, request.start_date, request.end_date,
                 self.year_start_month_var.get(), date.today(), request.staff_name))
+        except FileNotFoundError as e:
+            messagebox.showerror(constants.ERROR_TITLE, constants.TEMPLATE_NOT_FOUND_MESSAGE.format(path=e.filename))
         except Exception as e:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 

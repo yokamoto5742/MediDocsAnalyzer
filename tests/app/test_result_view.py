@@ -5,7 +5,7 @@ from tkinter import ttk
 from typing import cast
 from unittest.mock import MagicMock
 
-from app.charts import overall_figure, staff_figure, trend_figure
+from app.charts import overall_figure, trend_figure
 from app import constants
 from app.result_view import ResultView
 from service.models import Draft
@@ -33,9 +33,14 @@ def tree_values(tree: ttk.Treeview) -> list[tuple[str, ...]]:
 
 def test_figures() -> None:
     assert len(overall_figure(SUMMARY).axes[0].patches) == 4
-    assert len(staff_figure(STAFF_COUNTS).axes[0].lines) == 1
     trend_axes = trend_figure(TREND, '内科').axes[0]
     assert [line.get_label() for line in trend_axes.lines] == ['2025年度', '2026年度']
+
+
+def test_overall_figure_count_axis_has_integer_ticks_only() -> None:
+    axes = overall_figure(SUMMARY).axes[0]
+
+    assert all(tick == int(tick) for tick in axes.get_xticks())
 
 
 def test_trend_figure_does_not_draw_zero_months() -> None:

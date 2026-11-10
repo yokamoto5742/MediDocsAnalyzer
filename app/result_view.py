@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 from tkcalendar import DateEntry
 
 from app import constants
-from app.charts import overall_figure, staff_figure, trend_figure
+from app.charts import overall_figure, trend_figure
 from app.date_entry import make_date_entry
 from service.models import Draft
 from service.service_data_analyzer import OverallSummary, StaffCounts, TrendCounts
@@ -216,7 +216,7 @@ class ResultView:
     def _setup_staff_tab(self, on_export: Callable[[], None], on_staff_selected: Callable[[], None]) -> None:
         tab = self.staff_tab
         tab.columnconfigure(1, weight=1)
-        tab.rowconfigure(2, weight=1)
+        tab.rowconfigure(1, weight=1)
         header = ttk.Frame(tab)
         header.grid(row=0, column=0, columnspan=3, sticky=tk.EW)
         ttk.Label(header, text=constants.STAFF_TAB_LABEL).pack(side=tk.LEFT, padx=5)
@@ -234,8 +234,6 @@ class ResultView:
         self.document_tree.grid(row=1, column=1, sticky=tk.NSEW, pady=5)
         # 10 行を表示し、それより多い文書名はスクロールで見る
         add_vertical_scrollbar(tab, self.document_tree, row=1, column=2)
-        self.staff_chart = ChartArea(tab)
-        self.staff_chart.frame.grid(row=2, column=0, columnspan=3, sticky=tk.NSEW)
 
     def show_overview(self, overview: Overview) -> None:
         status_counts = overview.status_counts
@@ -298,4 +296,3 @@ class ResultView:
                   [list(row) for row in staff_counts.by_department])
         fill_tree(self.document_tree, list(constants.STAFF_DOCUMENT_COLUMNS),
                   [list(row) for row in staff_counts.by_document], first_width=360)
-        self.staff_chart.show(staff_figure(staff_counts))

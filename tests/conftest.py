@@ -4,6 +4,9 @@ import pytest
 
 from utils import config_manager
 
+# C:\Shinseikai\MediDocsAnalyzer\template のテンプレートの写し
+TEMPLATE_DIR = Path(__file__).parent / 'fixtures' / 'templates'
+
 
 @pytest.fixture
 def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -17,6 +20,7 @@ window_height = 450
 documents_database_path = {tmp_path / 'documents.db'}
 database_path = {tmp_path / 'database.db'}
 output_dir = {tmp_path / 'output'}
+template_dir = {TEMPLATE_DIR}
 
 [Analysis]
 start_date = 2025-04-01

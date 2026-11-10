@@ -8,7 +8,7 @@ from service.service_auth import LoginResult
 from service.service_data_analyzer import (TOTAL_LABEL, DocumentFilter, DocumentType, OverallSummary, StaffCounts, TrendCounts,
                                            count_documents, count_staff_documents, count_trend)
 from service.service_database import open_database, open_documents
-from service.service_excel_writer import save_results, save_staff_results, save_trend_results
+from service.service_excel_writer import DEFAULT_STAFF_FONT_SIZE, save_results, save_staff_results, save_trend_results
 from service.service_master import Department, Staff
 from service.service_overview import DEFAULT_PENDING_DAYS, Overview, load_overview
 from utils.config_manager import load_config
@@ -16,10 +16,16 @@ from utils.config_manager import load_config
 TOP_DOCUMENT_COUNT = 10
 # CSV2XL が作る文書の DB
 DEFAULT_DOCUMENTS_DATABASE_PATH = r'C:\Shinseikai\CSV2XL\医療文書担当一覧.db'
+# 全体・推移の Excel 出力に使うテンプレートのフォルダ
+DEFAULT_TEMPLATE_DIR = r'C:\Shinseikai\MediDocsAnalyzer\template'
 
 
 def split_list(text: str) -> list[str]:
     return [item.strip() for item in text.split(',') if item.strip()]
+
+
+def template_dir() -> str:
+    return load_config().get('PATHS', 'template_dir', fallback=DEFAULT_TEMPLATE_DIR)
 
 
 def open_documents_database() -> AbstractContextManager[sqlite3.Connection]:
@@ -112,9 +118,10 @@ class MedicalDocsAnalyzer:
     def export_staff(self, staff_name: str, start_date: date, end_date: date,
                      document_type: DocumentType = DocumentType.ALL) -> str:
         """1 人分の集計を Excel に保存し、保存先のパスを返す。A4 1 枚に収めるため文書名は上位だけ出す"""
-        output_dir = load_config()['PATHS']['output_dir']
+        config = load_config()
         staff_counts = self.staff_summary(staff_name, start_date, end_date, TOP_DOCUMENT_COUNT, document_type)
-        return save_staff_results(staff_counts, start_date, end_date, output_dir)
+        font_size = config.getint('Excel', 'staff_font_size', fallback=DEFAULT_STAFF_FONT_SIZE)
+        return save_staff_results(staff_counts, start_date, end_date, config['PATHS']['output_dir'], font_size)
 
     def trend_summary(self, document_filter: DocumentFilter, start_date: date, end_date: date, year_start_month: int,
                       today: date, staff_name: str | None = None) -> TrendCounts:
@@ -124,14 +131,15 @@ class MedicalDocsAnalyzer:
             return count_trend(connection, document_filter, start_date, end_date, year_start_month, today,
                                staff_name)
 
-    def export_trend(self, subject: str, document_filter: DocumentFilter, start_date: date, end_date: date,
+    def export_trend(self, document_filter: DocumentFilter, start_date: date, end_date: date,
                      year_start_month: int, today: date, staff_name: str | None = None) -> str:
-        """全体推移(staff_name を渡せば個人推移)を Excel に保存し、保存先のパスを返す。subject は表題に出す対象"""
+        """全体推移(staff_name を渡せば個人推移)を Excel に保存し、保存先のパスを返す"""
         trend = self.trend_summary(document_filter, start_date, end_date, year_start_month, today, staff_name)
-        return save_trend_results(trend, subject, start_date, end_date, load_config()['PATHS']['output_dir'])
+        return save_trend_results(trend, document_filter, staff_name, start_date, end_date, template_dir(),
+                                  load_config()['PATHS']['output_dir'])
 
     def run_analysis(self, start_date: date, end_date: date,
                      document_type: DocumentType = DocumentType.ALL) -> str:
         """期間内で集計対象の文書を集計して Excel に保存し、保存先のパスを返す"""
         summary = self.overall_summary(start_date, end_date, document_type)
-        return save_results(summary, load_config()['PATHS']['output_dir'])
+        return save_results(summary, template_dir(), load_config()['PATHS']['output_dir'])

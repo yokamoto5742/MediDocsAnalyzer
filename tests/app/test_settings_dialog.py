@@ -15,7 +15,7 @@ def dialog(config_path: Path, root: tk.Tk) -> SettingsDialog:
 
 
 def test_init_shows_saved_paths(dialog: SettingsDialog, config_path: Path) -> None:
-    assert list(dialog.path_vars) == ['documents_database_path', 'database_path', 'output_dir']
+    assert list(dialog.path_vars) == ['documents_database_path', 'database_path', 'output_dir', 'template_dir']
     assert dialog.path_vars['documents_database_path'].get() == str(config_path.parent / 'documents.db')
     assert dialog.path_vars['database_path'].get() == str(config_path.parent / 'database.db')
 
@@ -64,14 +64,15 @@ def test_save_writes_paths_and_keeps_other_settings(dialog: SettingsDialog) -> N
 
 
 def set_valid_numbers(dialog: SettingsDialog) -> None:
-    for key, value in (('window_width', ' 1250 '), ('window_height', '760'), ('pending_days', '10')):
+    for key, value in (('window_width', ' 1250 '), ('window_height', '760'), ('pending_days', '10'),
+                       ('staff_font_size', '14')):
         dialog.number_vars[key].set(value)
 
 
 def test_init_shows_saved_numbers(dialog: SettingsDialog) -> None:
-    # pending_days は一時の設定ファイルに無いため、初期値の 7 を出す
+    # pending_days と staff_font_size は一時の設定ファイルに無いため、初期値の 7 と 12 を出す
     assert {key: var.get() for key, var in dialog.number_vars.items()} == {
-        'window_width': '300', 'window_height': '450', 'pending_days': '7'}
+        'window_width': '300', 'window_height': '450', 'pending_days': '7', 'staff_font_size': '12'}
 
 
 def test_save_writes_numbers(dialog: SettingsDialog) -> None:
@@ -83,6 +84,7 @@ def test_save_writes_numbers(dialog: SettingsDialog) -> None:
     assert config['Appearance']['window_width'] == '1250'
     assert config['Appearance']['window_height'] == '760'
     assert config['Overview']['pending_days'] == '10'
+    assert config['Excel']['staff_font_size'] == '14'
 
 
 def test_save_rejects_invalid_pending_days(dialog: SettingsDialog) -> None:
