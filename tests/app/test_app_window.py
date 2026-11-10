@@ -15,7 +15,7 @@ from service.service_data_analyzer import (DocumentCounts, DocumentFilter, Docum
                                            TrendCounts)
 from service.service_master import ADMIN_ROLE, Department, Staff
 from service.service_overview import Overview
-from utils.config_manager import load_config, save_config
+from utils.config_manager import load_config, save_config, update_config
 
 DRAFT = Draft(date(2025, 4, 1), None, '診断書', '内科', '佐藤', '', '1')
 TREND = TrendCounts(4, [(2025, [1] * 12)])
@@ -530,7 +530,21 @@ def test_export_trend_uses_applied_document_type(gui: MedicalDocsAnalyzerGUI, an
                                                   date(2024, 1, 1), date(2025, 12, 31), 4, date.today(), None)
 
 
+def test_staff_user_sees_trend_by_default(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
+    with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
+        analyzer_class.return_value.list_departments.return_value = [Department('内科', 1)]
+        analyzer_class.return_value.trend_summary.return_value = TREND
+        gui = start_gui(root, Staff(2, '花﨑', 2, emr_id='S01'))
+
+    view = gui.result_view
+    assert view.notebook.tab(view.trend_tab, 'state') == 'normal'
+    # 全体推移(全担当者)と本人の個人推移を集計する
+    staff_names = [call.args[-1] for call in analyzer_class.return_value.trend_summary.call_args_list]
+    assert staff_names == [None, '花﨑']
+
+
 def test_staff_user_sees_only_own_staff_trend(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
+    update_config({'Login': {'staff_tabs': '概要,個人,個人推移'}})
     with patch('app.app_window.MedicalDocsAnalyzer') as analyzer_class:
         analyzer_class.return_value.list_departments.return_value = [Department('内科', 1)]
         analyzer_class.return_value.trend_summary.return_value = TREND

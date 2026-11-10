@@ -15,7 +15,7 @@ from app.settings_dialog import SettingsDialog
 from service.models import NoDataError
 from service.service_data_analyzer import DocumentFilter, DocumentType, trend_subject
 from service.service_master import ADMIN_ROLE, Staff
-from service.service_medical_docs_analyzer import MedicalDocsAnalyzer
+from service.service_medical_docs_analyzer import MedicalDocsAnalyzer, split_list
 from utils.config_manager import load_config, update_config
 from utils.date_period import PERIOD_NAMES, fiscal_year, get_period_range
 
@@ -23,6 +23,9 @@ from utils.date_period import PERIOD_NAMES, fiscal_year, get_period_range
 DEFAULT_YEAR_START_MONTH = 1
 TREND_SECTION = 'Trend'
 STAFF_TREND_SECTION = 'StaffTrend'
+# [Login] staff_tabs が無いときに職員に見せるタブ。同梱の config.ini と同じ値にする
+DEFAULT_STAFF_TABS = ','.join([constants.OVERVIEW_TAB_LABEL, constants.TREND_TAB_LABEL,
+                               constants.STAFF_SUMMARY_TAB_LABEL, constants.STAFF_TREND_TAB_LABEL])
 
 
 @dataclass
@@ -101,13 +104,23 @@ class MedicalDocsAnalyzerGUI:
             return None
         return self.user.name
 
+    @property
+    def staff_tabs(self) -> list[str]:
+        """職員に見せるタブの表示名([Login] staff_tabs)"""
+        return split_list(self.config.get('Login', 'staff_tabs', fallback=DEFAULT_STAFF_TABS))
+
+    @property
+    def shows_trend(self) -> bool:
+        """全体推移タブを見せるか。職員は staff_tabs にあるときだけ"""
+        return self.restricted_staff is None or constants.TREND_TAB_LABEL in self.staff_tabs
+
     def _apply_permissions(self) -> None:
-        """職員はマスタ・設定を使えず、自分の個人集計だけを見られる"""
+        """職員はマスタ・設定を使えず、staff_tabs のタブだけを見られる。個人・個人推移は本人だけ"""
         if self.restricted_staff is None:
             return
         for button in self.admin_buttons:
             button.state(['disabled'])
-        self.result_view.restrict_to_staff(self.restricted_staff)
+        self.result_view.restrict_to_staff(self.restricted_staff, self.staff_tabs)
 
     def _setup_date_frame(self, parent: ttk.Frame) -> None:
         date_frame = ttk.LabelFrame(parent, text=constants.ANALYSIS_PERIOD_LABEL, padding="5")
@@ -286,9 +299,9 @@ class MedicalDocsAnalyzerGUI:
             messagebox.showerror(constants.ERROR_TITLE, constants.EXPORT_ERROR_MESSAGE.format(error=e))
 
     def load_trend(self) -> None:
-        """全体推移と個人推移を、前回選んだ範囲・診療科・氏名で表示する。職員は全体推移を見られない"""
+        """全体推移と個人推移を、前回選んだ範囲・診療科・氏名で表示する。全体推移は見せるときだけ"""
         view = self.result_view
-        if self.restricted_staff is None:
+        if self.shows_trend:
             self._load_trend_panel(view.trend, TREND_SECTION)
         self._load_trend_panel(view.staff_trend, STAFF_TREND_SECTION)
 
@@ -329,8 +342,8 @@ class MedicalDocsAnalyzerGUI:
                             *read_date_range(panel.start_date, panel.end_date))
 
     def refresh_trends(self) -> None:
-        """集計対象を変えたときに推移を集計し直す。職員は全体推移を見られない"""
-        if self.restricted_staff is None:
+        """集計対象を変えたときに推移を集計し直す。全体推移は見せるときだけ"""
+        if self.shows_trend:
             self.refresh_trend()
         self.refresh_staff_trend()
 

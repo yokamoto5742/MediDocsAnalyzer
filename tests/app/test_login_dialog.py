@@ -1,5 +1,6 @@
 import tkinter as tk
 from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,6 +9,7 @@ from app import constants
 from app.login_dialog import ChangePasswordDialog, LoginDialog, ask_login, login_if_required
 from service.service_auth import LoginResult
 from service.service_master import Staff
+from utils.config_manager import update_config
 
 USER = Staff(1, '花﨑', 1, emr_id='S01')
 
@@ -116,15 +118,26 @@ def test_ask_login_requires_password_change(root: tk.Tk, messagebox: MagicMock) 
     (True, USER, (True, USER)),
     (True, None, (False, None)),
 ])
-def test_login_if_required(root: tk.Tk, messagebox: MagicMock, required: bool, user: Staff | None,
-                           expected: tuple[bool, Staff | None]) -> None:
+def test_login_if_required(config_path: Path, root: tk.Tk, messagebox: MagicMock, required: bool,
+                           user: Staff | None, expected: tuple[bool, Staff | None]) -> None:
     with (patch('app.login_dialog.MedicalDocsAnalyzer') as analyzer_class,
           patch('app.login_dialog.ask_login', return_value=user)):
         analyzer_class.return_value.login_required.return_value = required
         assert login_if_required(root) == expected
 
 
-def test_login_if_required_starts_without_login_when_database_fails(root: tk.Tk, messagebox: MagicMock) -> None:
+def test_login_if_required_skips_login_when_disabled(config_path: Path, root: tk.Tk, messagebox: MagicMock) -> None:
+    update_config({'Login': {'enabled': 'false'}})
+    with (patch('app.login_dialog.MedicalDocsAnalyzer') as analyzer_class,
+          patch('app.login_dialog.ask_login') as ask_login_mock):
+        analyzer_class.return_value.login_required.return_value = True
+        assert login_if_required(root) == (True, None)
+
+    ask_login_mock.assert_not_called()
+
+
+def test_login_if_required_starts_without_login_when_database_fails(config_path: Path, root: tk.Tk,
+                                                                     messagebox: MagicMock) -> None:
     with patch('app.login_dialog.MedicalDocsAnalyzer') as analyzer_class:
         analyzer_class.return_value.login_required.side_effect = OSError('offline')
         assert login_if_required(root) == (True, None)

@@ -435,7 +435,7 @@ wheels = [
 
 [[package]]
 name = "medidocsanalyzer"
-version = "2.1.0"
+version = "2.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "babel" },

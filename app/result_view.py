@@ -275,10 +275,14 @@ class ResultView:
         for row in [*rows, self.overall_total_row]:
             self.overall_tree.insert('', tk.END, values=row)
 
-    def restrict_to_staff(self, staff_name: str) -> None:
-        """全体・全体推移タブを隠し、個人・個人推移タブの氏名を選べなくする。概要タブは割り振りに使うため職員にも見せる"""
-        self.notebook.hide(self.overall_tab)
-        self.notebook.hide(self.trend_tab)
+    def restrict_to_staff(self, staff_name: str, visible_tabs: list[str]) -> None:
+        """visible_tabs(タブの表示名)に無いタブを隠し、個人・個人推移タブの氏名を本人だけにして選べなくする"""
+        tabs = {constants.OVERVIEW_TAB_LABEL: self.overview_tab, constants.OVERALL_TAB_LABEL: self.overall_tab,
+                constants.TREND_TAB_LABEL: self.trend_tab, constants.STAFF_SUMMARY_TAB_LABEL: self.staff_tab,
+                constants.STAFF_TREND_TAB_LABEL: self.staff_trend_tab}
+        for label, tab in tabs.items():
+            if label not in visible_tabs:
+                self.notebook.hide(tab)
         self.staff_combobox.state(['disabled'])
         self.set_staff_names([staff_name])
         assert self.staff_trend.staff_combobox is not None

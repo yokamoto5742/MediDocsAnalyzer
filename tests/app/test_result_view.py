@@ -176,11 +176,22 @@ def test_staff_trend_selects_saved_staff(root: tk.Tk) -> None:
 def test_restrict_to_staff_keeps_staff_trend_with_own_name(root: tk.Tk) -> None:
     view = make_view(root)
 
-    view.restrict_to_staff('花﨑')
+    view.restrict_to_staff('花﨑', ['概要', '個人推移'])
 
     assert view.notebook.tab(view.staff_trend_tab, 'state') == 'normal'
     assert view.staff_trend.staff_combobox is not None
     assert view.staff_trend.staff_combobox.instate(['disabled'])
+    assert view.staff_combobox.cget('values') == ('花﨑',)
+
+
+def test_restrict_to_staff_hides_tabs_not_listed(root: tk.Tk) -> None:
+    view = make_view(root)
+
+    view.restrict_to_staff('花﨑', ['概要', '全体推移', '個人'])
+
+    states = {view.notebook.tab(tab, 'text'): view.notebook.tab(tab, 'state') for tab in view.notebook.tabs()}
+    assert states == {'概要': 'normal', '全体': 'hidden', '全体推移': 'normal', '個人': 'normal',
+                      '個人推移': 'hidden'}
 
 
 def test_show_trend_rows_follow_years(root: tk.Tk) -> None:

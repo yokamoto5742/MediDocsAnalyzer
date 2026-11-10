@@ -5,6 +5,7 @@ from app import constants
 from service.service_auth import MIN_PASSWORD_LENGTH
 from service.service_master import Staff
 from service.service_medical_docs_analyzer import MedicalDocsAnalyzer
+from utils.config_manager import load_config
 
 
 def make_dialog(parent: tk.Tk, title: str) -> tuple[tk.Toplevel, ttk.Frame]:
@@ -101,8 +102,10 @@ def login_if_required(root: tk.Tk) -> tuple[bool, Staff | None]:
     """ログインが必要ならログイン画面を出す。(起動してよいか, ログインした担当者) を返す。
 
     担当者が None ならログインなしで、すべての操作をできる。
-    DB を開けないときは、ファイルパスを直せるようログインなしで起動する。
+    [Login] enabled が false の端末と、DB を開けないとき(ファイルパスを直せるよう)はログインなしで起動する。
     """
+    if not load_config().getboolean('Login', 'enabled', fallback=True):
+        return True, None
     analyzer = MedicalDocsAnalyzer()
     try:
         required = analyzer.login_required()
